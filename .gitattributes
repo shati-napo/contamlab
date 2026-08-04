@@ -1,0 +1,13 @@
+# シェルスクリプトは必ず LF。
+# Windows で編集して EC2 へ持っていくので、CRLF が混ざると Linux の bash が
+# 行末の \r をコマンド名の一部として読み、「$'\r': command not found」で落ちる。
+*.sh text eol=lf
+
+# PowerShell は Windows 側でしか動かさないので CRLF のままでよい。
+# ★ ただし BOM は外さないこと。Windows PowerShell 5.1 は BOM の無いファイルを
+#   ANSI として読むため、日本語コメントを含むスクリプトが構文エラーになる。
+*.ps1 text eol=crlf
+
+*.py text eol=lf
+*.md text eol=lf
+*.jsonl -text
