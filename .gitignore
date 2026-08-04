@@ -1,0 +1,33 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+.env
+
+# 応答キャッシュ(追記専用だが、巨大かつモデル出力なので配らない)
+data/cache/
+
+# 実験の記録と出力
+reports/
+
+# 退避したファイル(消さずに置いておくが、配りもしない)
+_trash/
+
+# ★ 摂動済みの問題インスタンスは絶対にコミットしない。
+# 公開した瞬間にスクレイプされ、次世代モデルの訓練データに入り、この検査が死ぬ。
+# 配るのは生成器とシードだけ(README の「中心にある逆説」を参照)。
+data/perturbed/
+*.perturbed.jsonl
+
+# 取得元のクローンと、変換後のベンチマーク本体。
+# 問題インスタンスは再配布しない(JMMLU は CC BY-SA。原典から取れば済む)。
+# 代わりに data/*.manifest.json を追跡する。取得元 URL・commit SHA・各 CSV の
+# sha256・採用/除外の内訳が入っており、**同じ JSONL を誰でも再現できる。**
+data/raw/
+data/*.jsonl
+!data/*.manifest.json

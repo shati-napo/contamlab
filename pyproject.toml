@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "contamlab"
+version = "0.1.0"
+description = "LLM ベンチマークの汚染を、検定・信頼区間・検出力・多重比較補正つきで測る"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+# 依存パッケージを持たない。統計層が成果物の中心なので、scipy に隠れた実装を
+# 信用する代わりに式をそのまま書き、既知の表値への回帰テストで固定している。
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+contamlab = "contamlab.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["contamlab*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

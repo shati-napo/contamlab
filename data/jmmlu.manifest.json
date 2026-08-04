@@ -1,0 +1,552 @@
+{
+  "source": {
+    "url": "https://github.com/nlp-waseda/JMMLU.git",
+    "commit": "762cbf192c9e4588b574d718f95afd64c96fcbf4",
+    "subdir": "JMMLU",
+    "license": "CC BY-SA 4.0"
+  },
+  "excluded": {
+    "JMMLU_NC_ND": "CC BY-NC-ND(改変禁止)。摂動は改変にあたるため取り込まない"
+  },
+  "totals": {
+    "rows": 7097,
+    "accepted": 6664,
+    "rejected": 433,
+    "by_reason": {
+      "並び順依存の選択肢": 409,
+      "選択肢が重複": 24
+    }
+  },
+  "subjects": [
+    {
+      "subject": "abstract_algebra",
+      "sha256": "b46184ba40eb707921bbda383c4106df70f386a5ad2a70d515811eaac1f5362a",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 98,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "anatomy",
+      "sha256": "806d0c9959b3c5346ca07522a832b802ffb3652687ee42c47b25b0bf1cbac7e1",
+      "published_at": "2024-01-09",
+      "rows": 132,
+      "accepted": 129,
+      "rejected": {
+        "並び順依存の選択肢": 2,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "astronomy",
+      "sha256": "937044df69bb5bec833f5b0fcbaa447d4420886c089c2e0e715e39c014b5f829",
+      "published_at": "2024-01-09",
+      "rows": 148,
+      "accepted": 140,
+      "rejected": {
+        "並び順依存の選択肢": 7,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "business_ethics",
+      "sha256": "aab6009114268c9399ff54cdb1b2cc544d9db843f3b700449d6d7ec5363b9cfc",
+      "published_at": "2024-01-09",
+      "rows": 86,
+      "accepted": 85,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "clinical_knowledge",
+      "sha256": "fe2858529e9f19ab9df52ceb7e964a455145cab9949d89edc53345edc0123a24",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 147,
+      "rejected": {
+        "並び順依存の選択肢": 3
+      }
+    },
+    {
+      "subject": "college_biology",
+      "sha256": "103a0ab6280a7c2b49b040e0da6248249c78732b804cea4f569c9ede41b2f5e8",
+      "published_at": "2024-01-09",
+      "rows": 143,
+      "accepted": 143,
+      "rejected": {}
+    },
+    {
+      "subject": "college_chemistry",
+      "sha256": "1d0e46404db714469c548edc31490abd57ed57dfc3d250302009ae46a7baa3db",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 99,
+      "rejected": {}
+    },
+    {
+      "subject": "college_computer_science",
+      "sha256": "6e19ec0236ccb057a36d9629bc34c526a568f45fe82beaaec022fa32587f847a",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 98,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "college_mathematics",
+      "sha256": "171571a0d9818d63ed96e15979c7d58613ad181ece0548ec999036b3f86113bc",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 96,
+      "rejected": {
+        "並び順依存の選択肢": 3
+      }
+    },
+    {
+      "subject": "college_medicine",
+      "sha256": "2a855ff0e40c417ec3f0b5352352bd6780496c8ed69a04203763ed603385f18a",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 148,
+      "rejected": {
+        "並び順依存の選択肢": 2
+      }
+    },
+    {
+      "subject": "college_physics",
+      "sha256": "e1f1ce2608afe1b32d130eb83220c5c0c7f4a3be20cab6677a804233458996e7",
+      "published_at": "2024-01-09",
+      "rows": 100,
+      "accepted": 100,
+      "rejected": {}
+    },
+    {
+      "subject": "computer_security",
+      "sha256": "c796c1714c651209337d46740e90b2506e64f3982771dc59d3191ccd7f20d886",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 93,
+      "rejected": {
+        "並び順依存の選択肢": 6
+      }
+    },
+    {
+      "subject": "conceptual_physics",
+      "sha256": "ec621cf6b744031c7a31db38ca2676c0e41971c6cdd6cb77a8bb2b4694478782",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 92,
+      "rejected": {
+        "並び順依存の選択肢": 57,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "econometrics",
+      "sha256": "2591f52dbee3a32315e2bcebedbd9433362642db184926e00a72e387ba3823dc",
+      "published_at": "2024-01-09",
+      "rows": 113,
+      "accepted": 112,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "electrical_engineering",
+      "sha256": "8020c1b562abd439917a6f688303f8812fbe689d672990886b4414f7aa304e56",
+      "published_at": "2024-01-09",
+      "rows": 144,
+      "accepted": 96,
+      "rejected": {
+        "並び順依存の選択肢": 47,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "elementary_mathematics",
+      "sha256": "11d301a48ef4d1725a568bdca2535ca44c5d75d8c28967ca902da06d3204fb29",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 148,
+      "rejected": {
+        "並び順依存の選択肢": 1,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "formal_logic",
+      "sha256": "17548cc0a197b6a0813b7da178448f364548eefec918f4812f5e3e33560b20f4",
+      "published_at": "2024-01-09",
+      "rows": 125,
+      "accepted": 122,
+      "rejected": {
+        "並び順依存の選択肢": 2,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "global_facts",
+      "sha256": "98859c1b4e65e2ae74d633c6b255ae49536f43816352fb1a5dfc33f4a840741c",
+      "published_at": "2024-01-09",
+      "rows": 97,
+      "accepted": 96,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "high_school_biology",
+      "sha256": "522dd23b3a6cfadbf31ead2bd7b27a029ce8d31a5b18724c3086ea1424cf15dc",
+      "published_at": "2024-01-09",
+      "rows": 148,
+      "accepted": 146,
+      "rejected": {
+        "並び順依存の選択肢": 2
+      }
+    },
+    {
+      "subject": "high_school_chemistry",
+      "sha256": "99aad9c97402b4d0ce0fecb106a1ae167523632eff3b806de118c5ab54e8d405",
+      "published_at": "2024-01-09",
+      "rows": 149,
+      "accepted": 145,
+      "rejected": {
+        "並び順依存の選択肢": 3,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "high_school_computer_science",
+      "sha256": "a0d16b04e484a8f3d332bf8ae505ac11596fdc9375a3659a566b49da6ff47ce9",
+      "published_at": "2024-01-09",
+      "rows": 98,
+      "accepted": 91,
+      "rejected": {
+        "並び順依存の選択肢": 7
+      }
+    },
+    {
+      "subject": "high_school_european_history",
+      "sha256": "c68cf86b6d2b694dedce956adb1d0b1bb045b8208a9dff3135cd741b01540d70",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 150,
+      "rejected": {}
+    },
+    {
+      "subject": "high_school_geography",
+      "sha256": "3982216eda5b10cf2c1febf5048849c9048906b1adac7c56a81fc526c3577ab9",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 149,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "high_school_macroeconomics",
+      "sha256": "6ec26aa3053c4a5569ce27b74bbe5f0d7f67f8ad1719b841dbe3e027a8d354f7",
+      "published_at": "2024-01-09",
+      "rows": 148,
+      "accepted": 147,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "high_school_mathematics",
+      "sha256": "530acdf4799017fcd0b95f799041dcf80b713018a21a4b9f44518f81a604a234",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 149,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "high_school_microeconomics",
+      "sha256": "9a8d53731b7afe17be4df7405fa3abc842041d244954d5e327b29818e2915917",
+      "published_at": "2024-01-09",
+      "rows": 149,
+      "accepted": 148,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "high_school_physics",
+      "sha256": "331b4ae3848a20327a396a0ef1f63bb7d90b2588b0896d36dd8e10c257c3a2b6",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 145,
+      "rejected": {
+        "並び順依存の選択肢": 4,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "high_school_psychology",
+      "sha256": "e1ae7b51a77d04cefe43a2346c4a89801f68a010aa4d4b456455fe21124298b7",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 150,
+      "rejected": {}
+    },
+    {
+      "subject": "high_school_statistics",
+      "sha256": "976a23d41c4317f59dab614c51c4056727a1d41bf40cecde141b9fb0aebc2e63",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 140,
+      "rejected": {
+        "並び順依存の選択肢": 10
+      }
+    },
+    {
+      "subject": "human_aging",
+      "sha256": "f7658d11145ddba939a2925340d774bb13efec605b0032794f8872d85375fc9f",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 146,
+      "rejected": {
+        "並び順依存の選択肢": 4
+      }
+    },
+    {
+      "subject": "human_sexuality",
+      "sha256": "5568efb996c266e92fbd8bab8e6ee0d8dfba9d53b16aef7523e7c0ed1390cd91",
+      "published_at": "2024-01-09",
+      "rows": 130,
+      "accepted": 107,
+      "rejected": {
+        "並び順依存の選択肢": 22,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "international_law",
+      "sha256": "a78509eb04d00d74f1f949595422ff9e42c507d553172b498f225b700c955c3c",
+      "published_at": "2024-01-09",
+      "rows": 120,
+      "accepted": 119,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "japanese_history",
+      "sha256": "f764c37458126f8e33bb0d421be0ad19eae4681e10b6ddc9661e10c132854846",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 150,
+      "rejected": {}
+    },
+    {
+      "subject": "jurisprudence",
+      "sha256": "4f53ace9921bc598a1d1ac5fe2f36789819fa7d44155e80a180e861ca4ee5e32",
+      "published_at": "2024-01-09",
+      "rows": 107,
+      "accepted": 106,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "logical_fallacies",
+      "sha256": "6dae60b956874b6ecd89a8a1e12aa581ef43eff22fc55406bf8513e9b01679a2",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 147,
+      "rejected": {
+        "並び順依存の選択肢": 3
+      }
+    },
+    {
+      "subject": "machine_learning",
+      "sha256": "4ad4bc128c57e26c1de249d338c3cd953079bed0128f5b5dd934b973c40f4bea",
+      "published_at": "2024-01-09",
+      "rows": 111,
+      "accepted": 95,
+      "rejected": {
+        "並び順依存の選択肢": 16
+      }
+    },
+    {
+      "subject": "management",
+      "sha256": "546ebd2087ca75fd87bd02cf0eb0fb8c9b6a3accdd234950929db3ed88652890",
+      "published_at": "2024-01-09",
+      "rows": 102,
+      "accepted": 101,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "marketing",
+      "sha256": "751cea1c2e148574bae17c37b533da67a8ec101f209c5827d16a0053f43ce674",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 147,
+      "rejected": {
+        "並び順依存の選択肢": 2,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "medical_genetics",
+      "sha256": "8bae3ffb77cc46541ed3a2ab7f41b4fbfb3bb5233dbf64ca73f7966ede25b3ee",
+      "published_at": "2024-01-09",
+      "rows": 99,
+      "accepted": 97,
+      "rejected": {
+        "並び順依存の選択肢": 2
+      }
+    },
+    {
+      "subject": "miscellaneous",
+      "sha256": "6a9a3aaf596fbeb8c0c9ed2c9b5e1d8f36761e0848d9b62b156bb2ef25603488",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 150,
+      "rejected": {}
+    },
+    {
+      "subject": "moral_disputes",
+      "sha256": "b1fa1fac53b1dfb25ca6c70555a6e926505503a36a1c4fcad1ab2660bc508c87",
+      "published_at": "2024-01-09",
+      "rows": 148,
+      "accepted": 90,
+      "rejected": {
+        "並び順依存の選択肢": 56,
+        "選択肢が重複": 2
+      }
+    },
+    {
+      "subject": "nutrition",
+      "sha256": "37bca5de64c67b568fcaf606598e4742e81b8dc9c4f9215cc7175f3bd4518b1a",
+      "published_at": "2024-01-09",
+      "rows": 149,
+      "accepted": 132,
+      "rejected": {
+        "並び順依存の選択肢": 17
+      }
+    },
+    {
+      "subject": "philosophy",
+      "sha256": "4cbad3032528351ca1d347996fb92b08d5d1f50261117cc8ef529a0fd0802cef",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 127,
+      "rejected": {
+        "並び順依存の選択肢": 22,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "prehistory",
+      "sha256": "e2ad7bf53ae0e085abc0ade85100e6a3559685f54a1e5b1f580cc7826b2358bf",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 130,
+      "rejected": {
+        "並び順依存の選択肢": 20
+      }
+    },
+    {
+      "subject": "professional_accounting",
+      "sha256": "72cea882026a8da00d6c843b72ed37b64e58708290978dd84c014ad0b5fe8f96",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 149,
+      "rejected": {
+        "並び順依存の選択肢": 1
+      }
+    },
+    {
+      "subject": "professional_medicine",
+      "sha256": "32fc40289c01de44adcd7fda413d11b40fae13344c23f405d468f1b10d572dce",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 149,
+      "rejected": {
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "professional_psychology",
+      "sha256": "e00e1aa8f59847179a3e5b77d2f8f11e563ba49f08224653fbe21255327deab2",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 146,
+      "rejected": {
+        "選択肢が重複": 2,
+        "並び順依存の選択肢": 2
+      }
+    },
+    {
+      "subject": "public_relations",
+      "sha256": "4d040e685ccdee6a9c032d539bd921801f2f00ea65f88461e496677019d051d4",
+      "published_at": "2024-01-09",
+      "rows": 109,
+      "accepted": 107,
+      "rejected": {
+        "並び順依存の選択肢": 1,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "security_studies",
+      "sha256": "75ba1fec88120bc89e0c7dfb62441c3c99aac3cd92d55bc1586ddaaccd05d38e",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 105,
+      "rejected": {
+        "並び順依存の選択肢": 45
+      }
+    },
+    {
+      "subject": "sociology",
+      "sha256": "00086014e56529d62ebd8267dfa6f5c70700af14078bf12961077aa84330bb69",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 132,
+      "rejected": {
+        "並び順依存の選択肢": 18
+      }
+    },
+    {
+      "subject": "virology",
+      "sha256": "f11fed89ed4e9656c9115811328560ab6365aefc44beebe0e815dbf02ea9d03c",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 135,
+      "rejected": {
+        "並び順依存の選択肢": 14,
+        "選択肢が重複": 1
+      }
+    },
+    {
+      "subject": "world_history",
+      "sha256": "8898f47ef6d43599cf2547886485c34e6ee50e7a22839f2c95c53ed5efb29238",
+      "published_at": "2024-01-09",
+      "rows": 150,
+      "accepted": 150,
+      "rejected": {}
+    },
+    {
+      "subject": "world_religions",
+      "sha256": "f78743eff00b1f530f98260e1d74587b159b3e6cc5e9b719af62d36f44ee69ad",
+      "published_at": "2024-01-09",
+      "rows": 147,
+      "accepted": 145,
+      "rejected": {
+        "並び順依存の選択肢": 1,
+        "選択肢が重複": 1
+      }
+    }
+  ]
+}
