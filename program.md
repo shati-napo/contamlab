@@ -109,7 +109,12 @@ commit	adjusted_lcb	drop_se	observed_psi	status	description
 - **「全モデルが一律に落ちた」を汚染と読まない。** 摂動の難易度上昇と区別できない。
   不均一さ検定(Cochran の Q)が有意でなければ、そう報告する
 - **解釈不能率が条件間でずれたら、落ちたのは能力ではなく採点。** `harness` が警告を出す
-- 応答キャッシュの `conflicts` が空でなければ、**モデルが非決定的**。temperature を確認する
+- 応答キャッシュの `conflicts` が空でなければ、**モデルが非決定的**。temperature を確認する。
+  **ただし逆は言えない。「`conflicts` が空 = 決定的」ではない。**
+  `CachedModel.answer` はキャッシュに当たれば**モデルを呼ばずに帰る**(`runner.py:223-229`)ので、
+  応答が再生されただけのときは `put()` に到達せず `conflicts` も立たない。
+  **決定性を測るなら、別のキャッシュファイルに独立に取り直して突き合わせる**
+  (`scripts/50-check-determinism.sh`)
 - **尤度ベースの手法(MIA / Min-K% / 交換可能性検定)に手を出さない。**
   Claude・OpenAI が log-prob を返さず、かつ MIA は現実設定でほぼランダムと示されている
 - **`ollama` は PATH に無い。** 実体は
@@ -124,6 +129,17 @@ commit	adjusted_lcb	drop_se	observed_psi	status	description
 - **ローカル実行では `--json` が無いと正解率が読めない。** テキストレポートは
   `accuracy_original` / `accuracy_perturbed` を出力しない(`report.py:142-143` は JSON 側のみ)。
   **パイロットでは必ず `--json` を付ける**
+- **`tools/ingest_jmmlu.py` の `ensure_clone` は pin ではなく HEAD を clone する。**
+  JMMLU 側に1コミットでも足されていれば件数が変わり、`item.id` が変わり、
+  `split_dev_holdout` の帰属が変わり、**DEV と HOLDOUT の分割が変わる。**
+  分割は「変えてはいけないもの」だが、**ずれても例外は出ない。静かに壊れる。**
+  新しい機械でベンチマークを作り直すときは、ingest を呼ぶ**前に**
+  `git checkout 762cbf19` し、生成 manifest をコミット済みのものと照合すること
+  (`scripts/20-rebuild-benchmark.sh`)
+- **`run` は `--yes` が無いと検出力ゲートに到達する前に終了する。**
+  `cli.py:121-128` が実 API 指定を見て終了コード3で返すので、
+  **見積もりだけではゲートの可否が分からない。** 問題を投げる前に可否を知りたければ
+  `contamlab power --n N --effect E --discordant-rate ψ` を別に叩く
 
 ## 前回までの学び
 
@@ -158,3 +174,12 @@ commit	adjusted_lcb	drop_se	observed_psi	status	description
   「45% 以上なら続行 / 25〜30% なら中止」と宣言したところ、実測 0.38 が**2帯の間に落ちた。**
   中間値が出たときが最も事後正当化しやすい。**帯は連続に張り、それでも間に落ちたら
   基準を書き換えず、判断の算術を数値で記録する。**
+- **2026-08-04**: **既に知っている値で、想定を宣言し直さない。** ラン 02 のパイロットを
+  01 と同じ n(50 / 200)で回すには ψ=0.30 を想定する必要があるが、その時点で
+  実測 ψ̂=0.335 とその Clopper-Pearson 上側 0.4050 を**既に知っていた**。
+  0.4050 で宣言すると必要問題数は 61 / 249 になり、n=50 / 200 では**ゲートを通らない。**
+  通る想定を選び直すのは、パイロット①で戒めた事後正当化と同じである。
+  n を 70 / 250 に上げて解決した(`take_deterministic` は prefix 安定なので
+  **70 ⊂ 250 ⊂ 本番 1,270** となり、キャッシュは1問も無駄にならない)。
+  ★ **2026-08-03 の「帯の間に落ちた」と同根。事前確約は「守れる形」ではなく
+  「今わかっていることを全部使った形」で書く。**
