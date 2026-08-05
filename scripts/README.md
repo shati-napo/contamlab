@@ -100,6 +100,19 @@ JMMLU 側に1コミットでも追加されていれば件数が変わり、`ite
 生成した manifest がコミット済みのものと**完全一致**するか、DEV 4,742 /
 HOLDOUT 1,922 が再現するかを確かめる。一致しなければそこで止まる。
 
+### Spot は使わない・ボリュームは 80GB(2026-08-05 判断)
+
+`00-launch-ec2.ps1` の `--block-device-mappings` は **`DeleteOnTermination=true`** である。
+一方 Spot の中断動作の既定は **terminate** なので、**中断された瞬間に EBS ごと消える** ——
+応答キャッシュも環境タグも `reports/` も残らない。「キャッシュが追記専用だから中断されても
+再開できる」は**この構成では成り立たない。** 作り直しに払う GPU 時間のほうが Spot の差額
+(1ラン数ドル)より高い。Spot を使うなら先に `DeleteOnTermination=false` と
+`InterruptionBehavior=stop` を入れること。**`-Spot` は残してあるが警告を出す。**
+
+`-VolumeGb` の既定は 200 → **80** に下げた。実需は OS 約15GB + GGUF 約13GB
+(13B と 8B の Q4_K_M)+ JMMLU とキャッシュで数百MB ≒ **40GB**。gp3 は
+**インスタンスを止めていても $0.1/GB/月** 掛かるので、200GB は月 $19 の払い過ぎになる。
+
 ### α は 0.05 のまま渡す
 
 M=2 の実効水準 0.0250 を `--alpha` に渡してはいけない。信頼区間と Cochran の Q まで

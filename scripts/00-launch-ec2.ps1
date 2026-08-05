@@ -24,8 +24,15 @@ param(
     # L4 24GB。13B の Q4_K_M が約 8.4GB、モデルは harness が逐次評価するので
     # ピークは最大の1本ぶん。48GB(g6e.xlarge)は要らない。
     [string]$InstanceType = "g6.xlarge",
-    [int]$VolumeGb = 200,
-    # Spot でよい。応答キャッシュは追記専用なので、中断されても続きから再開できる。
+    # 実需は OS 約15GB + GGUF 約13GB(13B と 8B の Q4_K_M)+ JMMLU とキャッシュで
+    # 数百MB ≒ 40GB。gp3 は起動していなくても $0.1/GB/月 掛かるので過剰に取らない。
+    [int]$VolumeGb = 80,
+    # ★ Spot は既定で使わない(2026-08-05 判断)。
+    #   「キャッシュが追記専用だから中断されても再開できる」は **この構成では成り立たない。**
+    #   下の block-device-mappings は DeleteOnTermination=true で、Spot の中断動作の既定は
+    #   terminate である。つまり中断 = EBS ごと消える = 応答キャッシュも環境タグも消える。
+    #   GPU 時間を払い直すほうが差額より高くつく。Spot を使うなら先に
+    #   DeleteOnTermination=false と InterruptionBehavior=stop を入れること。
     [switch]$Spot,
     [switch]$Execute
 )
@@ -86,6 +93,10 @@ $argsList = @(
 )
 if ($Spot) {
     $argsList += @("--instance-market-options", "MarketType=spot")
+    Write-Host ""
+    Write-Host "★ Spot を指定した。中断されると既定動作は terminate で、" -ForegroundColor Yellow
+    Write-Host "  DeleteOnTermination=true なので **応答キャッシュごと消える。**" -ForegroundColor Yellow
+    Write-Host "  作り直しに払う GPU 時間のほうが差額より高い。初回はオンデマンドを推奨。" -ForegroundColor Yellow
 }
 
 Write-Host ""
