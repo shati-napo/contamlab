@@ -25,11 +25,70 @@
 
 各段は前の段の出力を事前条件として確認するので、飛ばすと止まる。
 
+## 再開手順(手元・2026-08-05 時点の実値)
+
+下ごしらえ(IAM ユーザ・鍵ペア・SG・bundle)は**済んでいる。**
+**唯一の待ちは EC2 の G/VT クォータの承認**で、承認されるまで起動は
+`VcpuLimitExceeded` で弾かれる。**まず 0 を確認する。**
+
+```powershell
+$aws = "C:\Program Files\Amazon\AWSCLIV2\aws.exe"
+
+# ① クォータ。4.0 が返るまで先へ進まない(0.0 なら承認待ち)
+& $aws service-quotas get-service-quota --service-code ec2 `
+    --quota-code L-DB2E81BA --region ap-northeast-1 --query "Quota.Value" --output text
+
+# ② bundle を作り直す(コミットを足したなら必須。足していないなら不要)
+git bundle create C:\Users\kingo\projects\contamlab.bundle --all
+
+# ③ 起動。まず表示だけ(課金しない)→ 内容を見てから -Execute
+cd C:\Users\kingo\projects\contamlab
+.\scripts\00-launch-ec2.ps1 -KeyName contamlab -SecurityGroupId sg-0871cee36a8152bc6
+.\scripts\00-launch-ec2.ps1 -KeyName contamlab -SecurityGroupId sg-0871cee36a8152bc6 -Execute
+
+# ④ 転送して入る(<IP> は ③ が表示する)
+scp -i C:\Users\kingo\.ssh\contamlab.pem C:\Users\kingo\projects\contamlab.bundle ubuntu@<IP>:~
+ssh -i C:\Users\kingo\.ssh\contamlab.pem ubuntu@<IP>
+```
+
+インスタンス内:
+
+```bash
+git clone contamlab.bundle contamlab && cd contamlab
+bash scripts/10-bootstrap.sh          # ドライバ無し AMI なら一度終了する → 再起動して再実行
+bash scripts/20-rebuild-benchmark.sh
+bash scripts/30-record-environment.sh
+#   ★ ここで reports/environment.<tag>.md を preregister の「実行環境」枠へ貼る。
+#     貼るまで 40 へ進まない(下の「3. 実行環境」)。
+bash scripts/40-pilot.sh 1
+bash scripts/50-check-determinism.sh
+bash scripts/40-pilot.sh 2
+bash scripts/60-production.sh dev
+bash scripts/60-production.sh holdout  # ★ 1構成・1回だけ
+```
+
+> [!warning] 手元の環境で引っかかる2点
+> - **`aws` は PATH に無い場合がある。** `C:\Program Files\Amazon\AWSCLIV2\aws.exe` を直に呼ぶ。
+>   ただし `00-launch-ec2.ps1` は `Get-Command aws` を要求するので、**PATH が通った
+>   PowerShell から起動する**(通っていなければ新しいウィンドウを開き直す)。
+> - **SG はグローバル IP の /32 だけを許可している。** 回線が変わると SSH が通らない。
+>   その場合は現在の IP で規則を足し直す。
+>
+> 実験が終わったら **IAM アクセスキーを無効化する。**
+
 ## ★ 実行前に preregister へ追記が要る変更
 
 **結果を見る前に書くこと。** 書かずに走らせたら、その数字は事前確約の外になる。
 
-### 1. パイロットの問題数を 50 / 200 → **70 / 250** に上げた
+| | 状態(2026-08-05 確認) |
+|---|---|
+| 1. パイロット 50/200 → 70/250 | ✅ **記載済み。** preregister「パイロットの設計」節 + 変更履歴 2026-08-04 |
+| 2. パイロット③を①②に統合 | ✅ **記載済み。** 同上 |
+| 3. 実行環境 | ❌ **未記入。** `30-record-environment.sh` を走らせないと書けない。preregister の「実行環境」節に枠を用意してある |
+
+以下は各項目の根拠(記載済みのものも、何を確約したかを取り違えないために残す)。
+
+### 1. パイロットの問題数を 50 / 200 → **70 / 250** に上げた ✅ 記載済み
 
 01 のパイロットは ψ=0.30 を想定して n を決めた。しかしパイロット②で ψ̂=0.335 と
 その Clopper-Pearson 上側限界 **0.4050 を既に知っている。** 知っていながら 0.30 と
@@ -45,18 +104,21 @@ prefix 安定(`benchmark.py:227`)なので **70 ⊂ 250 ⊂ 本番 1,270** と�
 応答キャッシュは1問も無駄にならない。n=70 は preregister が既に宣言している
 パイロット③の設計値と同じである。
 
-### 2. パイロット③(モデル別の採点健全性)を①②に統合した
+### 2. パイロット③(モデル別の採点健全性)を①②に統合した ✅ 記載済み
 
 01 ではパイロット①②を1本のモデルで回したあと、③でロースター3本の採点健全性を
 別に確かめる設計だった。02 ではロースターが2本なので、**①②を最初からロースター
 2本で回せば③の目的(モデル別の解釈不能率と ψ)は同時に満たされる。**
 `40-pilot.sh` は分割表からモデル別の ψ を計算して表示する。
 
-### 3. 実行環境
+### 3. 実行環境 ❌ **未記入 —— 残っているのはこれだけ**
 
 `30-record-environment.sh` が生成する `reports/environment.<tag>.md` を
-preregister の `jmmlu-shuffle-02` 節に貼る。Ollama の版・GGUF の SHA256・
-GPU・`OLLAMA_NUM_PARALLEL=1` などが入っている。
+preregister の `jmmlu-shuffle-02` 節「実行環境」の枠に**そのまま貼る。**
+Ollama の版・GGUF の SHA256・GPU・`OLLAMA_NUM_PARALLEL=1` などが入っている。
+
+**`30` の直後・`40-pilot.sh 1` の前に貼る。** 後から書くと「実際に使った環境の記録」ではなく
+「結果を見たあとの記述」になる。バックエンドは測定条件なので、**確定してから測る。**
 
 ## 設計上の要点
 
