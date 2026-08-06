@@ -13,7 +13,7 @@
 
 | | スクリプト | 場所 | すること |
 |---|---|---|---|
-| 0 | `00-launch-ec2.ps1` | 手元(Windows) | GPU インスタンスを1台起こす。**既定は表示のみ** |
+| 0 | `00-launch-ec2.ps1` | 手元(Windows) | GPU インスタンスを1台起こす。**既定は表示のみ**。**AWS を使う場合のみ**(下記) |
 | 1 | `10-bootstrap.sh` | インスタンス内 | Ollama 導入・決定性のための設定・GGUF 取得・`verify` |
 | 2 | `20-rebuild-benchmark.sh` | インスタンス内 | JMMLU を **pin した SHA** から作り直し、manifest と照合 |
 | 3 | `30-record-environment.sh` | インスタンス内 | 版と GGUF の SHA256 を記録。**環境タグを確定** |
@@ -25,10 +25,78 @@
 
 各段は前の段の出力を事前条件として確認するので、飛ばすと止まる。
 
-## 再開手順(手元・2026-08-05 時点の実値)
+## ⚠️ AWS の GPU クォータは**否認された**(2026-08-06)
+
+`Running On-Demand G and VT instances`(`L-DB2E81BA` / ap-northeast-1)の 0 → 4 の
+申請は**承認されなかった。** 2026-08-06 時点の実測:
+
+| クォータ | 値 |
+|---|---|
+| `L-DB2E81BA` オンデマンド G/VT @ ap-northeast-1 | **0.0** |
+| `L-3819A6DF` Spot G/VT @ ap-northeast-1 | **0.0** |
+| `L-DB2E81BA` @ us-east-1 | **0.0** |
+| `L-1216C47A` オンデマンド Standard @ ap-northeast-1 | 16.0 |
+| `L-34B43A08` Spot Standard @ ap-northeast-1 | 32.0 |
+
+**Spot に逃げてもリージョンを変えても回避できない**(どちらも 0 で、別途承認が要る)。
+一方 **Standard 系の枠は空いている**ので、絞られているのは GPU だけである。
+Service Quotas の申請履歴は `CASE_OPENED` のまま更新されていないので、
+**API のステータスを承認の根拠にしない**(サポートケース側が正)。
+
+→ **AWS 以外の GPU ホストで走らせる。** 手順は下記。`00-launch-ec2.ps1` を使わない
+だけで、**インスタンス内の 1〜8 段はそのまま使える。**
+
+## EC2 以外の GPU ホストで走らせる
+
+判定は変わらず一行 —— **問題文が自分の管理下のプロセスの外に出るか**
+([CLAUDE.md](../CLAUDE.md))。GPU を時間借りして**自分で Ollama を動かす**形は
+EC2 と同じであり、この基準に抵触しない。マネージド推論 API は EC2 のときと同様に使わない。
+
+**ただし借り先の型で手当てが変わる。**
+
+| 借り先の型 | 例 | 手当て |
+|---|---|---|
+| **素の VM**(sudo + systemd) | Lambda Labs 等 | **そのまま。**`10-bootstrap.sh` は無改造で通る |
+| **貸しコンテナ**(root・systemd 無し) | RunPod 等 | `10-bootstrap.sh` が自動で `ollama serve` 直起動に切り替える |
+| **共同ホスト型** | 第三者が物理的にディスクへ触れる形態 | **使わない。** 非公開シードと HOLDOUT をそこに置けない |
+
+最後の行が選定基準である。**安さではなく、誰がディスクに触れるかで選ぶ。**
+
+### 借り先での手順
+
+```bash
+# 手元から(鍵と接続情報は借り先が発行するものを使う)
+scp -i <鍵> C:\Users\kingo\projects\contamlab.bundle <user>@<host>:~
+ssh -i <鍵> <user>@<host>
+
+# ホスト内
+git clone contamlab.bundle contamlab && cd contamlab
+bash scripts/10-bootstrap.sh
+bash scripts/20-rebuild-benchmark.sh
+
+# ★ 環境タグを明示する。EC2 の外では自動生成が "host-<GPU名>-<日付>" になるので、
+#   提供者が分かる名前を自分で付けたほうが来歴として読める。
+CONTAMLAB_ENV_TAG=lambda-a10-20260806 bash scripts/30-record-environment.sh
+
+#   → reports/environment.<tag>.md を preregister の「実行環境」枠に貼ってから次へ
+bash scripts/40-pilot.sh 1
+bash scripts/50-check-determinism.sh
+bash scripts/40-pilot.sh 2
+bash scripts/60-production.sh dev
+bash scripts/60-production.sh holdout   # ★ 1構成・1回だけ
+```
+
+**GPU の要件は `10-bootstrap.sh` が確認する** —— VRAM 12GB 未満なら止まる
+(13B の Q4_K_M が約 8.4GB。harness はモデルを逐次評価する `harness.py:170` ので
+ピークは最大の1本ぶん)。24GB 級(L4 / A10 / L40S)なら足りる。
+
+**撤収は EC2 のときと同じ**(下記「撤収」)。`reports/` と `data/cache/` を回収してから
+インスタンスを消す。**S3 にも借り先のストレージにも置かない。**
+
+## 再開手順(AWS の枠が通った場合・2026-08-05 時点の実値)
 
 下ごしらえ(IAM ユーザ・鍵ペア・SG・bundle)は**済んでいる。**
-**唯一の待ちは EC2 の G/VT クォータの承認**で、承認されるまで起動は
+**待ちは EC2 の G/VT クォータの承認**で、承認されるまで起動は
 `VcpuLimitExceeded` で弾かれる。**まず 0 を確認する。**
 
 ```powershell
@@ -133,6 +201,19 @@ Ollama の版・GGUF の SHA256・GPU・`OLLAMA_NUM_PARALLEL=1` などが入っ�
 対応: `30-record-environment.sh` が確定する**環境タグ**でキャッシュ名を分ける
 (`data/cache/responses.<tag>.jsonl`)。CPU 時代のものは
 `responses.cpu-laptop-20260804.jsonl` に改名済みで、既定パスは空になっている。
+
+**タグの取り違えを2箇所で塞いだ(2026-08-06)。**
+
+- **タグが無いまま先へ進めない。** `env_tag` は `$(...)` の中で呼ばれるので、そこで
+  `exit 1` しても死ぬのは副シェルだけで、呼び出し元は
+  `data/cache/responses..jsonl` という**もっともらしい別ファイル**を受け取ったまま
+  走り出していた。40 / 50 / 60 の冒頭で `require_env_tag` を呼んで止める
+- **EC2 の外で "ec2-" を名乗らない。** タグの自動生成が無条件に `ec2-` を前置していたので、
+  借りた GPU ホストで走らせると**嘘の実行環境が preregister に載る。**
+  IMDS が答えたときだけ `ec2-`、それ以外は `host-<GPU名>-<日付>` にした
+- **設定を書いた≠効いている。** `10-bootstrap.sh` は `ollama serve` の `/proc/<pid>/environ`
+  を読んで `OLLAMA_NUM_PARALLEL=1` 等が実プロセスに入っているか確かめる。
+  古い `ollama serve` が生き残っていると、設定ファイルは正しいのにプロセスは古い環境で動く
 
 ### 決定性は宣言せず実測する
 

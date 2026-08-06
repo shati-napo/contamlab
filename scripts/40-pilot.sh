@@ -34,6 +34,7 @@ esac
 EXPECTED_PSI=0.405   # preregister: パイロット②(01)の ψ̂=0.335 の CP 両側95%上側
 
 require_ollama
+require_env_tag
 [[ -f "$BENCHMARK" ]] || { echo "ベンチマークが無い。先に 20-rebuild-benchmark.sh。" >&2; exit 1; }
 
 CACHE="$(cache_path)"

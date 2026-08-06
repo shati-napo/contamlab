@@ -45,12 +45,21 @@ DEV_SEED="dev-seed"
 # reports/ は .gitignore 済みなので、タグの置き場所として .gitignore を触らずに済む。
 ENV_TAG_FILE="reports/env-tag"
 
-env_tag() {
-  if [[ ! -f "$ENV_TAG_FILE" ]]; then
+# ★ これは **サブシェルの外**から呼ぶこと。
+#   env_tag は $(...) の中で使われるので、そこで exit しても死ぬのは副シェルだけで、
+#   呼び出し元は "data/cache/responses..jsonl" という**もっともらしい別ファイル**を
+#   受け取ったまま先へ進んでしまう。環境と結び付かないキャッシュに書き込むのは、
+#   このプロジェクトが最も嫌う「静かに間違う」型の失敗である。
+require_env_tag() {
+  if [[ ! -s "$ENV_TAG_FILE" ]]; then
     echo "環境タグが無い: $ENV_TAG_FILE" >&2
     echo "先に scripts/30-record-environment.sh を実行すること。" >&2
     exit 1
   fi
+}
+
+env_tag() {
+  require_env_tag
   tr -d '[:space:]' < "$ENV_TAG_FILE"
 }
 
@@ -72,6 +81,28 @@ model_flags() {
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "見つからない: $1" >&2; exit 1; }
 }
+
+# ---------------------------------------------------------------------------
+# 特権と init —— 借りる先によって違う(EC2 だけを想定しない)
+# ---------------------------------------------------------------------------
+# EC2 / Lambda Labs 等の「素の VM」は ubuntu ユーザ + sudo + systemd。
+# 一方、貸しコンテナ型(RunPod 等)は **root で sudo が無く、systemd も無い**。
+# どちらでも同じ手順が通るように、ここで吸収する。
+if [[ "$(id -u)" -eq 0 ]]; then
+  SUDO=""
+elif command -v sudo >/dev/null 2>&1; then
+  SUDO="sudo"
+else
+  SUDO=""
+fi
+
+# systemd が実際に PID 1 として動いているか。`systemctl` の有無では判定できない
+# (コンテナにはバイナリだけ残っていることがある)。
+has_systemd() { [[ -d /run/systemd/system ]] && command -v systemctl >/dev/null 2>&1; }
+
+# systemd が無いホストで Ollama に渡した環境変数の控え。
+# 30-record-environment.sh が来歴を書くときの読み元になる。
+OLLAMA_ENV_FILE="reports/ollama-env"
 
 # Ollama が生きているか。CLI ではなく API で見る(program.md の環境メモ)。
 require_ollama() {

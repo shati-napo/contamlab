@@ -20,6 +20,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 require_ollama
+require_env_tag
 CACHE_A="$(cache_path)"
 CACHE_B="$(det_cache_path)"
 RESULT_A="reports/pilot1.$(env_tag).json"

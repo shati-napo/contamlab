@@ -33,8 +33,18 @@ LIFECYCLE="$(imds instance-life-cycle || echo "")"
 
 TAG="${CONTAMLAB_ENV_TAG:-}"
 if [[ -z "$TAG" ]]; then
-  base="${INSTANCE_TYPE:-$(uname -m)}"
-  TAG="ec2-${base}-$(date -u +%Y%m%d)"
+  if [[ -n "$INSTANCE_TYPE" ]]; then
+    TAG="ec2-${INSTANCE_TYPE}-$(date -u +%Y%m%d)"
+  else
+    # ★ EC2 の外(借りた GPU ホスト・手元の機械)。**"ec2-" を名乗らせない。**
+    #   環境タグはキャッシュ名であると同時に来歴の識別子であり、これがそのまま
+    #   preregister の「実行環境」に載る。嘘のタグは嘘の事前確約になる。
+    gpu_short="$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null \
+      | head -1 | tr -cd '[:alnum:]' | tr '[:upper:]' '[:lower:]')"
+    TAG="host-${gpu_short:-$(uname -m)}-$(date -u +%Y%m%d)"
+    echo "★ EC2 の外で走っている。タグを '$TAG' にした。" >&2
+    echo "  提供者を含めたいなら CONTAMLAB_ENV_TAG で明示する(例: lambda-a10-20260806)。" >&2
+  fi
   TAG="${TAG//[^A-Za-z0-9._-]/-}"
 fi
 
@@ -56,7 +66,17 @@ require_ollama
 OLLAMA_VER="$(ollama --version 2>&1 | head -1 | tr -d '\r')"
 GPU_INFO="$(nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader 2>/dev/null | head -1 || echo "")"
 CUDA_VER="$(nvidia-smi --query-gpu=name --format=csv,noheader >/dev/null 2>&1 && nvidia-smi | sed -n 's/.*CUDA Version: *\([0-9.]*\).*/\1/p' | head -1 || echo "")"
-OLLAMA_ENV="$(systemctl show ollama -p Environment --value 2>/dev/null || echo "")"
+# systemd が無いホストでは 10-bootstrap.sh が控えを残している。
+# **どちらの経路でも来歴が空にならないようにする**(空欄のまま preregister に貼ると、
+# 「並列度を固定した」という主張の裏付けが消える)。
+if has_systemd; then
+  OLLAMA_ENV="$(systemctl show ollama -p Environment --value 2>/dev/null || echo "")"
+else
+  OLLAMA_ENV="$(tr '\n' ' ' < "$OLLAMA_ENV_FILE" 2>/dev/null || echo "")"
+fi
+if [[ -z "${OLLAMA_ENV// /}" ]]; then
+  echo "★ Ollama の環境変数を復元できなかった。10-bootstrap.sh を先に走らせること。" >&2
+fi
 OLLAMA_MODELS_DIR="$(sed -n 's/.*OLLAMA_MODELS=\([^ ]*\).*/\1/p' <<< "$OLLAMA_ENV")"
 OLLAMA_MODELS_DIR="${OLLAMA_MODELS_DIR:-/usr/share/ollama/.ollama/models}"
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/10-bootstrap.sh — EC2 インスタンス側で最初に1回だけ走らせる。
+# scripts/10-bootstrap.sh — GPU ホスト側で最初に1回だけ走らせる。
 #
 #   bash scripts/10-bootstrap.sh
 #   OLLAMA_VERSION=v0.x.y bash scripts/10-bootstrap.sh   # 版を固定して再現する
@@ -15,10 +15,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 banner "0. GPU の確認"
 if ! command -v nvidia-smi >/dev/null 2>&1; then
-  echo "nvidia-smi が無い。ドライバを入れる(DLAMI を使えばここは飛ばせる)。"
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq ubuntu-drivers-common
-  sudo ubuntu-drivers install
+  echo "nvidia-smi が無い。ドライバを入れる(DLAMI や GPU 貸し出し業者のイメージなら飛ばせる)。"
+  $SUDO apt-get update -qq
+  $SUDO apt-get install -y -qq ubuntu-drivers-common
+  $SUDO ubuntu-drivers install
   echo "★ ドライバを入れた。**再起動してからこのスクリプトを再実行すること。**"
   exit 0
 fi
@@ -36,8 +36,8 @@ fi
 banner "1. 依存(OS 側の道具だけ)"
 # contamlab は**標準ライブラリのみ**なので pip install も venv も要らない。
 # リポジトリのルートから `python3 -m contamlab` を叩けば動く。
-sudo apt-get update -qq
-sudo apt-get install -y -qq git curl python3
+$SUDO apt-get update -qq
+$SUDO apt-get install -y -qq git curl python3
 
 banner "2. Ollama"
 if command -v ollama >/dev/null 2>&1 && [[ -z "${OLLAMA_VERSION:-}" ]]; then
@@ -48,9 +48,9 @@ elif [[ -n "${OLLAMA_VERSION:-}" ]]; then
   tmp="$(mktemp -d)"
   curl -fsSL -o "$tmp/ollama.tgz" \
     "https://github.com/ollama/ollama/releases/download/${OLLAMA_VERSION}/ollama-linux-amd64.tgz"
-  sudo tar -C /usr -xzf "$tmp/ollama.tgz"
+  $SUDO tar -C /usr -xzf "$tmp/ollama.tgz"
   rm -rf "$tmp"
-  sudo useradd -r -s /bin/false -m -d /usr/share/ollama ollama 2>/dev/null || true
+  $SUDO useradd -r -s /bin/false -m -d /usr/share/ollama ollama 2>/dev/null || true
 else
   curl -fsSL https://ollama.com/install.sh | sh
   echo
@@ -67,22 +67,61 @@ banner "3. 決定性と秘匿のための環境変数を固定"
 #
 # OLLAMA_HOST=127.0.0.1 も必須。0.0.0.0 で待つと HOLDOUT の問題文を投げる口が
 # インスタンスの外に開く。**問題文が自分の管理下のプロセスの外に出るか**が判定の一行。
-sudo mkdir -p /etc/systemd/system/ollama.service.d
-sudo tee /etc/systemd/system/ollama.service.d/contamlab.conf >/dev/null <<'EOF'
-[Service]
-Environment="OLLAMA_HOST=127.0.0.1:11434"
-Environment="OLLAMA_NUM_PARALLEL=1"
-Environment="OLLAMA_MAX_LOADED_MODELS=1"
-Environment="OLLAMA_KEEP_ALIVE=30m"
-Environment="OLLAMA_MODELS=/opt/ollama/models"
-EOF
-sudo mkdir -p /opt/ollama/models
-sudo chown -R ollama:ollama /opt/ollama 2>/dev/null || sudo chown -R "$USER" /opt/ollama
-sudo systemctl daemon-reload
-sudo systemctl enable --now ollama
+OLLAMA_ENV_KV=(
+  "OLLAMA_HOST=127.0.0.1:11434"
+  "OLLAMA_NUM_PARALLEL=1"
+  "OLLAMA_MAX_LOADED_MODELS=1"
+  "OLLAMA_KEEP_ALIVE=30m"
+  "OLLAMA_MODELS=/opt/ollama/models"
+)
+
+$SUDO mkdir -p /opt/ollama/models
+$SUDO chown -R ollama:ollama /opt/ollama 2>/dev/null || $SUDO chown -R "$(id -un)" /opt/ollama
+
+# 記録は systemd の有無に関わらず残す。30-record-environment.sh は systemd が無ければ
+# こちらを読む(**来歴が環境によって欠けることを許さない**)。
+mkdir -p reports
+printf '%s\n' "${OLLAMA_ENV_KV[@]}" > "$OLLAMA_ENV_FILE"
+
+if has_systemd; then
+  $SUDO mkdir -p /etc/systemd/system/ollama.service.d
+  {
+    echo "[Service]"
+    for kv in "${OLLAMA_ENV_KV[@]}"; do printf 'Environment="%s"\n' "$kv"; done
+  } | $SUDO tee /etc/systemd/system/ollama.service.d/contamlab.conf >/dev/null
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl enable --now ollama
+else
+  # systemd が無いホスト(貸しコンテナ型など)。同じ環境変数を渡して直に起動する。
+  # ★ 環境変数を渡さずに起動すると OLLAMA_NUM_PARALLEL の既定は 1 ではないので、
+  #   **決定性の前提が静かに崩れる。** ここは省略できない。
+  echo "systemd が無い。ollama serve を直接起動する。"
+  pkill -f 'ollama serve' 2>/dev/null || true
+  env "${OLLAMA_ENV_KV[@]}" nohup ollama serve > /tmp/ollama.log 2>&1 &
+fi
 sleep 3
 require_ollama
 echo "Ollama 応答あり。"
+
+# ★ 設定を書いただけでは「効いている」ことにならない —— daemon-reload の忘れや、
+#   前から生き残っていた ollama serve が居座っている場合、ファイルは正しいのに
+#   **プロセスは古い環境で動いている。** Ollama は API で並列度を返さないので、
+#   実際に走っているプロセスの environ を読んで確かめる。
+serve_pid="$(pgrep -f 'ollama serve' | head -1 || true)"
+if [[ -n "$serve_pid" ]] && { [[ -r "/proc/$serve_pid/environ" ]] || $SUDO test -r "/proc/$serve_pid/environ"; }; then
+  live_env="$( ($SUDO cat "/proc/$serve_pid/environ" 2>/dev/null || cat "/proc/$serve_pid/environ") | tr '\0' '\n')"
+  for kv in "${OLLAMA_ENV_KV[@]}"; do
+    if grep -qxF "$kv" <<< "$live_env"; then
+      printf '  ✓ %s\n' "$kv"
+    else
+      echo "  ★ 反映されていない: $kv(pid $serve_pid)" >&2
+      echo "    古い ollama serve が生き残っている可能性がある。止めてから再実行すること。" >&2
+      exit 1
+    fi
+  done
+else
+  echo "  ★ ollama serve の環境を読めなかった。OLLAMA_NUM_PARALLEL=1 を手で確認すること。" >&2
+fi
 
 banner "4. GGUF の取得(mmnga / Q4_K_M 統一を維持)"
 for entry in "${ROSTER[@]}"; do

@@ -17,6 +17,7 @@ case "$SPLIT" in
 esac
 
 require_ollama
+require_env_tag
 TAG="$(env_tag)"
 PILOT2="reports/pilot2.$TAG.json"
 DETERMINISM="reports/determinism.$TAG.json"
