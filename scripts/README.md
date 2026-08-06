@@ -62,21 +62,52 @@ EC2 と同じであり、この基準に抵触しない。マネージド推論 
 
 最後の行が選定基準である。**安さではなく、誰がディスクに触れるかで選ぶ。**
 
-### 借り先での手順
+**GPU の要件は `10-bootstrap.sh` が確認する** —— VRAM 12GB 未満なら止まる
+(13B の Q4_K_M が約 8.4GB。harness はモデルを逐次評価する `harness.py:170` ので
+ピークは最大の1本ぶん)。24GB 級(L4 / A10 / L40S / RTX 6000)なら足りる。
+
+### 借り先: **Lambda**(2026-08-06 決定)
+
+**素の Ubuntu VM(`ubuntu` ユーザ + sudo + systemd・ドライバ導入済み)を選んだ。**
+RunPod のほうが安い(L4 $0.39/h 対 RTX 6000 $0.69/h)が、貸しコンテナなので
+**systemd 無しの分岐**という実機未検証の経路を通る。差額は 8 時間で $3 —— 
+**検証済みの経路を通れることのほうが安い。**
+
+RunPod を選び直す場合は、`/workspace`(ネットワークボリューム)の**外**に
+リポジトリとキャッシュを置かないこと。コンテナディスクは停止で消える ——
+**Spot で EBS ごと消える件と同じ構造の罠**である。
+
+#### 手元での準備(課金前)
+
+```powershell
+# ① bundle を作り直す(コミットを足したなら必須)
+git bundle create C:\Users\kingo\projects\contamlab.bundle --all
+git bundle verify C:\Users\kingo\projects\contamlab.bundle
+
+# ② Lambda に登録する公開鍵。**AWS 用に作った鍵をそのまま使い回せる**
+#    (ed25519。秘密鍵は C:\Users\kingo\.ssh\contamlab.pem のまま動かさない)
+ssh-keygen -y -f C:\Users\kingo\.ssh\contamlab.pem
+#    → 出力を Lambda のコンソールの SSH keys に貼る
+```
+
+#### 起動と持ち込み(ここから課金)
+
+```powershell
+# <IP> は Lambda のコンソールが表示する
+scp -i C:\Users\kingo\.ssh\contamlab.pem C:\Users\kingo\projects\contamlab.bundle ubuntu@<IP>:~
+ssh -i C:\Users\kingo\.ssh\contamlab.pem ubuntu@<IP>
+```
+
+#### ホスト内
 
 ```bash
-# 手元から(鍵と接続情報は借り先が発行するものを使う)
-scp -i <鍵> C:\Users\kingo\projects\contamlab.bundle <user>@<host>:~
-ssh -i <鍵> <user>@<host>
-
-# ホスト内
 git clone contamlab.bundle contamlab && cd contamlab
 bash scripts/10-bootstrap.sh
 bash scripts/20-rebuild-benchmark.sh
 
 # ★ 環境タグを明示する。EC2 の外では自動生成が "host-<GPU名>-<日付>" になるので、
 #   提供者が分かる名前を自分で付けたほうが来歴として読める。
-CONTAMLAB_ENV_TAG=lambda-a10-20260806 bash scripts/30-record-environment.sh
+CONTAMLAB_ENV_TAG=lambda-rtx6000-20260806 bash scripts/30-record-environment.sh
 
 #   → reports/environment.<tag>.md を preregister の「実行環境」枠に貼ってから次へ
 bash scripts/40-pilot.sh 1
@@ -86,9 +117,15 @@ bash scripts/60-production.sh dev
 bash scripts/60-production.sh holdout   # ★ 1構成・1回だけ
 ```
 
-**GPU の要件は `10-bootstrap.sh` が確認する** —— VRAM 12GB 未満なら止まる
-(13B の Q4_K_M が約 8.4GB。harness はモデルを逐次評価する `harness.py:170` ので
-ピークは最大の1本ぶん)。24GB 級(L4 / A10 / L40S)なら足りる。
+> [!warning] Lambda 固有の注意
+> - **SSH は AWS の SG のような絞り込みが既定で無い。** ただし
+>   `10-bootstrap.sh` が `OLLAMA_HOST=127.0.0.1` を立てるので、**11434 は外に開かない。**
+>   問題文を投げる口がホストの外に出ないことが要件であり、そこは満たしている
+> - **インスタンスを消すとディスクも消える。** 撤収前に `reports/` と `data/cache/` を
+>   回収する(下記「撤収」)。**永続ファイルシステムを付けても、HOLDOUT と
+>   非公開シードはそこに置かない**
+> - 在庫が薄い。目当ての GPU が埋まっていたら **VRAM 24GB 以上**であれば別型でよい。
+>   ただし**型が変われば環境タグも変える**(キャッシュを混ぜない)
 
 **撤収は EC2 のときと同じ**(下記「撤収」)。`reports/` と `data/cache/` を回収してから
 インスタンスを消す。**S3 にも借り先のストレージにも置かない。**
