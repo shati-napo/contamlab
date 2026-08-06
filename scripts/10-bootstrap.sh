@@ -90,7 +90,13 @@ if has_systemd; then
     for kv in "${OLLAMA_ENV_KV[@]}"; do printf 'Environment="%s"\n' "$kv"; done
   } | $SUDO tee /etc/systemd/system/ollama.service.d/contamlab.conf >/dev/null
   $SUDO systemctl daemon-reload
-  $SUDO systemctl enable --now ollama
+  # ★ `enable --now` では足りない(2026-08-06 実機で判明)。--now は「停止していれば
+  #   起動する」であって、**既に走っているユニットは再起動しない。** Ollama の
+  #   install.sh は導入時にサービスを起動してしまうので、drop-in を書いた直後の
+  #   `enable --now` は何もせず、プロセスは古い環境のまま生き続ける。
+  #   下の /proc/<pid>/environ 照合はまさにこれを捕まえた。**restart は省略できない。**
+  $SUDO systemctl enable ollama
+  $SUDO systemctl restart ollama
 else
   # systemd が無いホスト(貸しコンテナ型など)。同じ環境変数を渡して直に起動する。
   # ★ 環境変数を渡さずに起動すると OLLAMA_NUM_PARALLEL の既定は 1 ではないので、
