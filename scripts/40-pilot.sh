@@ -94,6 +94,11 @@ cat <<'EOF'
   読む   : 解釈不能率(モデル別・条件別)/ 素の正解率 / モデル別の ψ / conflicts
   読まない: drop / p_value / p_holm / adjusted_lcb
            ★ 汚染の判定は HOLDOUT でのみ行う。パイロットの効果量は見ない。
+
+  ★ ①(identity)の ψ=0 を「決定的である証拠」と読まないこと。identity は摂動後の
+    プロンプトが原文と同一なので、**2回目はキャッシュに当たり、同じ文字列が返る。**
+    ψ=0 は構成上そうなるだけで、モデルを2回呼んだ結果ではない。
+    決定性は 50-check-determinism.sh が**別のキャッシュに取り直して**測る。
 EOF
 
 $PY - "$OUT" <<'PYEOF'
@@ -102,9 +107,17 @@ import json, sys
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 sample = data["sample"]
 n = sample["n_items"]
+# ★ observed_power は None になりうる(2026-08-06 実機で判明)。identity 摂動では
+#   不一致ペアが1件も出ないので、harness は「不一致率が狙う効果量を下回った」として
+#   検出力を算出不能にする。**これは異常ではなくパイロット①の正常な結果**である
+#   (何も変えなければ差はちょうど0)。ここで :.3f を当てて落ちると、
+#   **本文の数字を印字する前に要約が死ぬ。** 読むべき値は解釈不能率なので、
+#   整形の都合で読めなくなるのは本末転倒だった。
+power = sample["observed_power"]
+power_text = f"{power:.3f}" if power is not None else "算出不能(不一致ペアが0件)"
 print()
 print(f"  n = {n} / 全体の ψ̂ = {sample['observed_discordant_rate']:.4f}"
-      f" / 達成検出力 = {sample['observed_power']:.3f}")
+      f" / 達成検出力 = {power_text}")
 print()
 print(f"  {'モデル':<16} {'素の正解率':>10} {'摂動後':>8} {'ψ̂(モデル別)':>14}"
       f" {'解釈不能(原/摂)':>18}")
