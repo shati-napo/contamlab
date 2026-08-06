@@ -52,22 +52,87 @@ $PY tools/ingest_jmmlu.py \
   --manifest "$GENERATED_MANIFEST"
 
 banner "3. 照合 — コミット済み manifest と完全一致するか"
-$PY - "$COMMITTED_MANIFEST" "$GENERATED_MANIFEST" <<'PYEOF'
-import json, sys
+$PY - "$COMMITTED_MANIFEST" "$GENERATED_MANIFEST" "$REPO_DIR" <<'PYEOF'
+import hashlib, json, pathlib, sys
 
 committed, generated = (json.load(open(p, encoding="utf-8")) for p in sys.argv[1:3])
+repo_dir = pathlib.Path(sys.argv[3])
+
 if committed == generated:
     print("一致。取得元・件数・除外内訳・各 CSV の sha256 まで同一。")
     raise SystemExit(0)
 
-print("★ 不一致。ベンチマークが再現していない。実験を進めてはいけない。", file=sys.stderr)
-for key in sorted(set(committed) | set(generated)):
-    if committed.get(key) != generated.get(key):
-        print(f"  差分のあるキー: {key}", file=sys.stderr)
-if committed.get("totals") != generated.get("totals"):
-    print(f"  committed totals = {committed.get('totals')}", file=sys.stderr)
-    print(f"  generated totals = {generated.get('totals')}", file=sys.stderr)
-raise SystemExit(1)
+# ★ ここから先は「不一致を見逃す」処理ではなく、「不一致に**説明を要求する**」処理である。
+#
+#   2026-08-06、Lambda の Linux ホストで最初にここが落ちた。差分は subjects だけ、しかも
+#   各科目の rows / accepted / rejected は全53科目一致していて、**違うのは CSV の sha256
+#   だけ**だった。原因は git の改行変換 —— manifest を作ったのは Windows で、autocrlf が
+#   チェックアウト時に LF を CRLF へ書き換えていた。記録されていたのは**変換後**のハッシュ
+#   であり、上流リポジトリのバイト列は LF のままである。
+#
+#   だからといって「ハッシュが違っても件数が合えばよい」に緩めるのは、この段の存在意義
+#   (静かに壊れる事故を捕まえる)を捨てることになる。**改行差だと主張するなら、
+#   committed のハッシュを CRLF 変換でバイト単位に再現できなければならない。**
+#   再現できない科目が1つでもあれば、従来どおり止める。
+def explains_as_line_endings():
+    if set(committed) != set(generated):
+        return False, "manifest のキー集合が違う"
+    for key in committed:
+        if key != "subjects" and committed[key] != generated[key]:
+            return False, f"{key} が違う(改行では説明できない)"
+
+    cs, gs = committed["subjects"], generated["subjects"]
+    if len(cs) != len(gs):
+        return False, "科目数が違う"
+
+    for c, g in zip(cs, gs):
+        if c["subject"] != g["subject"]:
+            return False, "科目の並びが違う"
+        # sha256 **以外**が1つでも違えば改行では説明できない。
+        if {k: v for k, v in c.items() if k != "sha256"} != \
+           {k: v for k, v in g.items() if k != "sha256"}:
+            return False, f"{c['subject']}: 件数か除外内訳が違う"
+        if c["sha256"] == g["sha256"]:
+            continue
+
+        path = repo_dir / "JMMLU" / f"{c['subject']}.csv"
+        if not path.is_file():
+            return False, f"{c['subject']}: CSV が見つからない({path})"
+        raw = path.read_bytes()
+        if hashlib.sha256(raw).hexdigest() != g["sha256"]:
+            return False, f"{c['subject']}: 手元の CSV が生成 manifest と一致しない"
+        crlf = raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        if hashlib.sha256(crlf).hexdigest() != c["sha256"]:
+            return False, f"{c['subject']}: 改行変換では committed の sha256 を再現できない"
+    return True, ""
+
+
+ok, why = explains_as_line_endings()
+if not ok:
+    print("★ 不一致。ベンチマークが再現していない。実験を進めてはいけない。", file=sys.stderr)
+    print(f"  {why}", file=sys.stderr)
+    for key in sorted(set(committed) | set(generated)):
+        if committed.get(key) != generated.get(key):
+            print(f"  差分のあるキー: {key}", file=sys.stderr)
+    if committed.get("totals") != generated.get("totals"):
+        print(f"  committed totals = {committed.get('totals')}", file=sys.stderr)
+        print(f"  generated totals = {generated.get('totals')}", file=sys.stderr)
+    raise SystemExit(1)
+
+print("▲ 各 CSV の sha256 が committed と違う。**差は改行だけであることを実測で確認した。**")
+print("  committed 側は Windows のチェックアウト(CRLF)を記録している。手元の CSV を")
+print("  LF→CRLF に変換すると committed のハッシュを**バイト単位で再現できた**(全科目)。")
+print("  件数・除外内訳・科目の並び・取得元 commit はすべて一致している。")
+print()
+print("  ★ 問題の id は内容ではなく**位置**で決まる(ingest_jmmlu.py:296 の")
+print("    `jmmlu/{subject}/{index:04d}`)。よって改行差は id を動かさず、")
+print("    DEV/HOLDOUT の分割にも影響しない —— それを次の段で件数で確かめる。")
+print()
+print("  ★ ただし ingest は newline=\"\" で読む(csv モジュールの作法)ので、")
+print("    **引用フィールド内部の改行は問題文にそのまま残る。** Windows 版の問題文には")
+print("    CR が紛れており、**この Linux 版のほうが上流のバイト列に忠実**である。")
+print("    プロンプトが CR の分だけ違うので、**Windows 時代のキャッシュとは混ぜない。**")
+print("    (環境タグでキャッシュを分けているので既に満たされている)")
 PYEOF
 
 banner "4. 分割の同一性 — DEV / HOLDOUT の件数が凍結値と一致するか"
