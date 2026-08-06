@@ -827,9 +827,43 @@ HOLDOUT で **次を全部**満たしたときのみ「汚染あり」と結論�
 
 <!-- ▼ ここに reports/environment.<tag>.md の中身を貼る ▼ -->
 
-> **未記入**(2026-08-05 23:00 時点)。AWS の G/VT クォータが `CASE_OPENED` で
-> 承認待ちのため、インスタンスをまだ起こしていない。**この枠が埋まるまで本番もパイロットも
-> 走らせない。**
+#### 実行環境(lambda-a100-40gb-20260806・2026-08-06 記録)
+
+| 項目 | 値 |
+|---|---|
+| 借り先 | **Lambda**(AWS の G/VT クォータが否認されたため EC2 ではない) |
+| インスタンス | `(EC2 外)` / — / — |
+| GPU | NVIDIA A100-SXM4-40GB, 40960 MiB, 580.105.08 |
+| CUDA | 13.0 |
+| OS / カーネル | Ubuntu 22.04.5 LTS / 6.8.0-1046-nvidia |
+| Ollama | `ollama version is 0.32.6` |
+| Ollama の環境変数 | `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin OLLAMA_HOST=127.0.0.1:11434 OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_KEEP_ALIVE=30m OLLAMA_MODELS=/opt/ollama/models ` |
+| contamlab | `90feaf8` |
+| 応答キャッシュ | `data/cache/responses.lambda-a100-40gb-20260806.jsonl`(**この環境専用。CPU 時代のものは持ち込まない**) |
+
+| モデル | 取得元 | GGUF の SHA256 |
+|---|---|---|
+| `llmjp3-13b` | `hf.co/mmnga/llm-jp-3-13b-instruct3-gguf:Q4_K_M` | `9e46c803b89341f49469ade52fe539850e91a07ef524e0c6a99cd1148e44b60f` |
+| `swallow31-8b` | `hf.co/mmnga/Llama-3.1-Swallow-8B-Instruct-v0.5-gguf:Q4_K_M` | `6da177cee6797ad8f67cdaf6fac5d52818cc0582c7b0779c5c50ef419ca0b088` |
+
+> `OLLAMA_NUM_PARALLEL=1` は決定性のための設定である。並列実行はリクエストを
+> バッチにまとめるので、バッチの組み方で浮動小数の加算順序が変わりうる。
+> `temperature 0` は「最も確率の高い選択肢を選ぶ」であって「計算結果が同じになる」
+> ではない。決定性は宣言ではなく **scripts/50-check-determinism.sh の実測**で示す。
+
+> [!warning] ★ 環境変数は「書いた」のではなく「効いている」ことを確認した
+> `10-bootstrap.sh` の初回実行は `/proc/<pid>/environ` の照合で **exit 1 して止まった。**
+> drop-in ファイルの中身は正しかったのに、`systemctl enable --now ollama` は
+> **既に走っているユニットを再起動しない**ため、Ollama の `install.sh` が起動した
+> プロセスが古い環境のまま生き残っていた。**`OLLAMA_NUM_PARALLEL=1` が効いていない
+> 状態でパイロットを走らせるところだった。**
+> `enable` + `restart` に修正(`ce96034`)して再実行し、上表の5項目すべてが実プロセスの
+> `environ` に入っていることを確認してからこの記録を作っている。
+
+> [!note] 疎通で確認した既知の挙動(パイロット①で測る)
+> `llmjp3-13b` は停止トークンを本文に漏らす(`1+1は？` に対し `2です。<|im_end|>`)。
+> **採点で弾けるかどうかは事前条件の「解釈不能率 5%」で判定する。**
+> 測る前に採点規則へ手を入れることはしない(`runner.py` の採点規則は編集禁止)。
 
 <!-- ▲ ここまで ▲ -->
 
@@ -840,6 +874,29 @@ HOLDOUT で **次を全部**満たしたときのみ「汚染あり」と結論�
 ---
 
 ## 変更履歴
+
+- **2026-08-06**: **実行系を Lambda の GPU ホストに確定し、[実行環境](#実行環境-パイロットを走らせる前に埋める2026-08-05-に枠を用意)の枠を埋めた**(**結果を見る前**)。
+  AWS の G/VT クォータが否認されたため EC2 ではない。判定の一行(**問題文が自分の管理下の
+  プロセスの外に出るか**)は満たしている —— GGUF を自分のディスクに置き、`127.0.0.1` で
+  待つ自分の Ollama プロセスで読む。環境タグ `lambda-a100-40gb-20260806`、キャッシュは新規。
+
+- **2026-08-06**: **問題文のバイト列が `jmmlu-shuffle-01` 時代と厳密には同一でないことを記録する**
+  (**結果を見る前**)。`20-rebuild-benchmark.sh` が各 CSV の sha256 の不一致で止まったので調べた。
+  - 原因は **git の改行変換**。committed の `data/jmmlu.manifest.json` を作ったのは Windows で、
+    `autocrlf` がチェックアウト時に LF を CRLF に書き換えていた。記録されていたのは
+    **変換後**のハッシュであり、上流リポジトリのバイト列は LF のままである。
+  - **改行差であることは実測で確認した。** 手元の CSV を LF→CRLF に変換すると
+    committed の sha256 を**全53科目でバイト単位に再現**できた。件数・除外内訳・科目の並び・
+    取得元 commit(`762cbf19`)はすべて一致。照合スクリプトはこの再現を**要求する**形に
+    変更した(`90feaf8`)。再現できない科目が1つでもあれば従来どおり止まる。
+  - **DEV/HOLDOUT の分割は動かない。** 問題の id は内容ではなく位置で決まる
+    (`ingest_jmmlu.py:296` の `jmmlu/{subject}/{index:04d}`)。実測でも
+    **6,664 / 4,742 / 1,922 が凍結値と完全一致**した。
+  - ⚠️ **ただし問題文そのものは CR の分だけ違う。** ingest は `newline=""` で読むので
+    引用フィールド内部の改行は本文に残る(**362 セルが該当**)。Windows 版の問題文には CR が
+    紛れており、**この Linux 版のほうが上流のバイト列に忠実**である。
+    → **CPU/Windows 時代のキャッシュとは混ぜない**(環境タグでキャッシュを分けているので満たされている)。
+    → **`jmmlu-shuffle-01` のパイロット値と `jmmlu-shuffle-02` の値を直接比較しない。**
 
 - **2026-08-05**: **宣言と表の食い違いを2件直した(内容の変更ではなく反映漏れの是正)。**
   (1) `OLLAMA_NUM_PARALLEL=1` は 2026-08-04 の変更履歴で「測定条件に加えた」と確約済みだったが、
