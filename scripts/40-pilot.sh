@@ -35,9 +35,11 @@ EXPECTED_PSI=0.405   # preregister: パイロット②(01)の ψ̂=0.335 の CP 
 
 require_ollama
 require_env_tag
+require_prompt_format   # ★ サブシェルの外で。パイロット⓪(35-select-format.sh)が先
 [[ -f "$BENCHMARK" ]] || { echo "ベンチマークが無い。先に 20-rebuild-benchmark.sh。" >&2; exit 1; }
 
 CACHE="$(cache_path)"
+PROMPT_FORMAT="$(prompt_format)"
 OUT="reports/pilot${STAGE}.$(env_tag).json"
 mkdir -p reports data/cache
 
@@ -45,6 +47,7 @@ banner "$LABEL"
 cat <<EOF
   問題数        : $SAMPLE_N(DEV から決定論的に抽出)
   摂動器        : $PERTURBATOR
+  出力書式      : $PROMPT_FORMAT(パイロット⓪が選んだもの。手で変えない)
   狙う効果量    : $TARGET_EFFECT
   想定 ψ        : $EXPECTED_PSI
   α             : 0.05(既定のまま。Holm は harness が判定側で行う)
@@ -65,7 +68,7 @@ banner "呼び出し回数の見積もり"
 set +e
 $PY -m contamlab run \
   --benchmark "$BENCHMARK" --seed "$DEV_SEED" --split dev --sample-n "$SAMPLE_N" \
-  --perturbator "$PERTURBATOR" \
+  --perturbator "$PERTURBATOR" --prompt-format "$PROMPT_FORMAT" \
   --target-effect "$TARGET_EFFECT" --expected-discordant-rate "$EXPECTED_PSI" \
   --k 1 --cache "$CACHE" $(model_flags)
 status=$?
@@ -85,7 +88,7 @@ banner "実行"
 # 進捗は別端末で: watch -n 30 "wc -l $CACHE"(追記専用なので行数が代理指標になる)
 $PY -m contamlab run \
   --benchmark "$BENCHMARK" --seed "$DEV_SEED" --split dev --sample-n "$SAMPLE_N" \
-  --perturbator "$PERTURBATOR" \
+  --perturbator "$PERTURBATOR" --prompt-format "$PROMPT_FORMAT" \
   --target-effect "$TARGET_EFFECT" --expected-discordant-rate "$EXPECTED_PSI" \
   --k 1 --yes --cache "$CACHE" --json "$OUT" $(model_flags)
 

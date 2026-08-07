@@ -67,20 +67,70 @@ def normalize(text: str) -> str:
     return _WHITESPACE.sub(" ", text.strip())
 
 
-def format_prompt(item: Item) -> str:
+# 出力書式の候補。**末尾の指示行だけ**が違い、問題文と選択肢の並べ方は共通である
+# (preregister.md の「ラン: jmmlu-shuffle-03」で凍結した3つ)。
+#
+# 3つとも既存の `select` で読める。**採点器に新しい規則は要らない** ——
+# B が誘導する「A」は規則2(ラベル1文字)が、C が誘導する「答え: A」は規則3
+# (先頭のラベル)が既に拾う。書式と採点器を同時に緩めると、解釈不能率が下がった原因を
+# どちらにも帰属できなくなるので、動かすのは書式だけにしてある。
+PROMPT_FORMATS: dict[str, str] = {
+    "A": "正しい選択肢の記号だけを答えてください。",
+    "B": "正しい選択肢の記号だけを答えてください。\n出力例: A",
+    "C": (
+        "最初の行に「答え: X」とだけ書いてください(X は選択肢の記号)。\n"
+        "理由や説明は書かないでください。"
+    ),
+}
+DEFAULT_PROMPT_FORMAT = "A"
+
+_prompt_format = DEFAULT_PROMPT_FORMAT
+
+
+def set_prompt_format(name: str) -> None:
+    """使う書式をプロセス全体に設定する。**起動時に1度だけ呼ぶ。**
+
+    `harness.run_items` は書式を引数に取らない([harness.py](harness.py) は編集禁止領域
+    なので引数を足せない)。そのためモジュール変数で持つしかない。
+
+    可変なグローバル状態は本来この装置に置きたくないが、**書式はプロンプト本文を
+    変えるのでキャッシュキー(モデル名 + プロンプトの sha256)に自動的に入る。**
+    よって CLAUDE.md が警告する「静かな混入」—— 設定を変えたのに古い応答が
+    黙って返る —— は書式に関しては起きない。別の書式は別のキーになる。
+    """
+    if name not in PROMPT_FORMATS:
+        raise ValueError(f"未知の出力書式: {name!r}(選べるのは {sorted(PROMPT_FORMATS)})")
+    global _prompt_format
+    _prompt_format = name
+
+
+def current_prompt_format() -> str:
+    """いま使っている書式。**測定条件なので結果と一緒に記録する。**"""
+    return _prompt_format
+
+
+def format_prompt(item: Item, prompt_format: str | None = None) -> str:
     """モデルに投げる文面。**問題文を先頭に置く**(応答から問題を逆引きするため)。
 
     オリジナルと摂動版で構造が完全に同じであること。ここが違うと、正答率の差が
-    汚染ではなく書式の差になる。
+    汚染ではなく書式の差になる。**書式は両条件に等しく効くので、この契約は壊れない。**
+
+    `prompt_format` を省くと `set_prompt_format` で設定した値を使う。
+    自由記述(選択肢なし)は書式の対象外 —— 候補3つはどれも「記号の答え方」の
+    指定であり、記号が存在しない問題には意味がないため。
     """
     if not item.is_multiple_choice:
         return f"{item.question}\n\n答えだけを簡潔に書いてください。"
+
+    name = _prompt_format if prompt_format is None else prompt_format
+    if name not in PROMPT_FORMATS:
+        raise ValueError(f"未知の出力書式: {name!r}(選べるのは {sorted(PROMPT_FORMATS)})")
 
     lines = [item.question, ""]
     for label, choice in zip(CHOICE_LABELS, item.choices):
         lines.append(f"{label}. {choice}")
     lines.append("")
-    lines.append("正しい選択肢の記号だけを答えてください。")
+    lines.append(PROMPT_FORMATS[name])
     return "\n".join(lines)
 
 

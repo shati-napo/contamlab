@@ -8,15 +8,18 @@ import pytest
 from contamlab.benchmark import Item
 from contamlab.perturb import ShuffleChoices, perturb_all
 from contamlab.runner import (
+    PROMPT_FORMATS,
     CachedModel,
     FakeModel,
     Model,
     ResponseCache,
+    current_prompt_format,
     format_prompt,
     grade,
     normalize,
     run_items,
     select,
+    set_prompt_format,
 )
 
 
@@ -68,6 +71,82 @@ class TestFormatPrompt:
         prompt = format_prompt(Item(id="q1", question="首都は?", answer="東京"))
 
         assert "A." not in prompt
+
+
+class TestPromptFormat:
+    """出力書式の候補(preregister.md の jmmlu-shuffle-03 で凍結した3つ)。"""
+
+    @pytest.fixture(autouse=True)
+    def _元の書式に戻す(self):
+        original = current_prompt_format()
+        yield
+        set_prompt_format(original)
+
+    def test_既定は現行書式のまま(self) -> None:
+        """★ 回帰。既定を動かしたら過去の測定と比較できなくなる。"""
+        assert current_prompt_format() == "A"
+        assert format_prompt(_item()).endswith("正しい選択肢の記号だけを答えてください。")
+
+    def test_3書式は互いに異なるプロンプトを作る(self) -> None:
+        """★ 違わなければ書式を比べる意味が無く、キャッシュキーも衝突する。"""
+        prompts = {name: format_prompt(_item(), name) for name in PROMPT_FORMATS}
+
+        assert len(set(prompts.values())) == len(PROMPT_FORMATS)
+
+    @pytest.mark.parametrize("name", sorted(PROMPT_FORMATS))
+    def test_どの書式でも問題文が先頭で摂動版と構造が同じ(self, name: str) -> None:
+        """★ 書式を足しても format_prompt の契約は壊れない。"""
+        item = _item()
+        perturbed = ShuffleChoices().apply(item, "seed")
+
+        original_lines = format_prompt(item, name).splitlines()
+        perturbed_lines = format_prompt(perturbed, name).splitlines()
+
+        assert original_lines[0] == "水素の元素記号は?"
+        assert len(original_lines) == len(perturbed_lines)
+        assert original_lines[-1] == perturbed_lines[-1]
+
+    @pytest.mark.parametrize(
+        "name,raw",
+        [("A", "A"), ("B", "A"), ("C", "答え: A")],
+    )
+    def test_各書式が誘導する答え方を既存の採点器が読める(self, name: str, raw: str) -> None:
+        """★ 書式と採点器を同時に緩めない、という制約の回帰テスト。
+
+        これが落ちたら `select` を触るのではなく、その書式を候補から外す。
+        """
+        assert select(_item(), raw) == "H"
+
+    def test_自由記述は書式の対象外(self) -> None:
+        """記号が無い問題に「記号だけ答えろ」の書き分けは意味を持たない。"""
+        item = Item(id="q1", question="首都は?", answer="東京")
+
+        assert len({format_prompt(item, name) for name in PROMPT_FORMATS}) == 1
+
+    def test_設定した書式がプロセス全体に効く(self) -> None:
+        set_prompt_format("C")
+
+        assert current_prompt_format() == "C"
+        assert format_prompt(_item()) == format_prompt(_item(), "C")
+
+    @pytest.mark.parametrize("bad", ["", "D", "a", "現行"])
+    def test_未知の書式は黙って通さない(self, bad: str) -> None:
+        with pytest.raises(ValueError):
+            set_prompt_format(bad)
+        with pytest.raises(ValueError):
+            format_prompt(_item(), bad)
+
+    def test_書式が変わればキャッシュキーが変わる(self, tmp_path: Path) -> None:
+        """★ CLAUDE.md の「静かな混入」が書式では起きないことの確認。
+
+        キャッシュキーは モデル名 + プロンプト なので、書式は本文経由で自動的に鍵に入る。
+        """
+        cache = ResponseCache(tmp_path / "c.jsonl")
+        cache.put("m", format_prompt(_item(), "A"), "A")
+
+        assert cache.get("m", format_prompt(_item(), "B")) is None
+        assert cache.get("m", format_prompt(_item(), "C")) is None
+        assert cache.get("m", format_prompt(_item(), "A")) == "A"
 
 
 class TestSelect:

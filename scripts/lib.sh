@@ -65,6 +65,33 @@ env_tag() {
 
 cache_path() { echo "data/cache/responses.$(env_tag).jsonl"; }
 
+# ---------------------------------------------------------------------------
+# 出力書式 — パイロット⓪(35-select-format.sh)が選んだ1文字
+# ---------------------------------------------------------------------------
+# preregister「ラン: jmmlu-shuffle-03」。書式は**測定条件**なので、パイロット①②と
+# 本番は必ず同じものを使う。手で打ち直すと段ごとにずれるので、⓪ の結果をファイルに
+# 焼いて後段が読む(環境タグと同じ作法)。
+#
+# ★ env_tag と同じ理由で require_* は**サブシェルの外**から呼ぶこと。
+#   $(...) の中で exit しても死ぬのは副シェルだけで、呼び出し元は空文字を
+#   受け取ったまま先へ進む。書式が空のまま走ると `--prompt-format ""` で
+#   argparse が弾くので静かには壊れないが、依存関係は明示しておく。
+PROMPT_FORMAT_FILE="reports/prompt-format"
+
+require_prompt_format() {
+  if [[ ! -s "$PROMPT_FORMAT_FILE" ]]; then
+    echo "出力書式が決まっていない: $PROMPT_FORMAT_FILE" >&2
+    echo "先に scripts/35-select-format.sh を実行すること。" >&2
+    echo "(preregister「ラン: jmmlu-shuffle-03」のパイロット⓪)" >&2
+    exit 1
+  fi
+}
+
+prompt_format() {
+  require_prompt_format
+  tr -d '[:space:]' < "$PROMPT_FORMAT_FILE"
+}
+
 # 決定性測定用の**捨てキャッシュ**。本番キャッシュと混ぜない。
 # 混ぜると2回目の実行が1回目の答えを再生してしまい(runner.py:223 の短絡)、
 # 「不一致 0 件」が自明に出る。測定として無意味になる。

@@ -31,7 +31,16 @@ from .harness import Design, UnderpoweredError, run, self_check
 from .harness import _synthetic_items as synthetic_items
 from .perturb import REGISTRY, get_perturbator, perturb_all
 from .report import format_result, format_self_check, result_to_dict
-from .runner import CachedModel, FakeModel, ResponseCache, format_prompt
+from .runner import (
+    DEFAULT_PROMPT_FORMAT,
+    PROMPT_FORMATS,
+    CachedModel,
+    FakeModel,
+    ResponseCache,
+    current_prompt_format,
+    format_prompt,
+    set_prompt_format,
+)
 from .stats.power import min_detectable_effect, plan, required_n
 
 DEFAULT_CACHE = Path("data/cache/responses.jsonl")
@@ -79,6 +88,7 @@ def cmd_power(args: argparse.Namespace) -> int:
 
 
 def cmd_perturb(args: argparse.Namespace) -> int:
+    set_prompt_format(args.prompt_format)
     items = _load_items(args)[: args.limit]
     perturbator = get_perturbator(args.perturbator)
 
@@ -109,6 +119,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     load_dotenv(Path(".env"))
+    # ★ 何よりも先に。FakeModel はプロンプトを構築時に captureし、呼び出し回数の
+    #   見積もりもプロンプトからキャッシュキーを作る。後から変えると食い違う。
+    set_prompt_format(args.prompt_format)
 
     items = _load_items(args)
     perturbed = perturb_all(items, get_perturbator(args.perturbator), args.seed)
@@ -168,9 +181,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     _print_run_footer(budget, cache)
 
     if args.json:
+        # 書式は測定条件なので結果と一緒に残す。`Design` に足さないのは harness.py が
+        # 編集禁止領域だからで、ここで注入する(記録が目的であって判定には使わない)。
+        payload = result_to_dict(result)
+        payload["prompt_format"] = current_prompt_format()
+
         args.json.parent.mkdir(parents=True, exist_ok=True)
         args.json.write_text(
-            json.dumps(result_to_dict(result), ensure_ascii=False, indent=2) + "\n",
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
         print(f"\nJSON を書き出した: {args.json}")
@@ -256,6 +274,7 @@ def _print_call_plan(
     print(f"  問題数            : {len(items)}")
     print(f"  モデル            : {len(args.model)} 本(うち実 API {len(api_models)} 本)")
     print(f"  キャッシュ        : {args.cache}({len(cache)} 件)")
+    print(f"  出力書式          : {current_prompt_format()}")
     print(f"  ★課金される回数   : {needed}")
     if uses_api:
         print(f"  温度 / 最大トークン: {args.temperature} / {args.max_tokens}")
@@ -327,6 +346,13 @@ def _add_benchmark_args(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--sample-n", type=int, help="決定論的に N 問だけ抜く(検出力で決めた標本サイズ)"
+    )
+    parser.add_argument(
+        "--prompt-format",
+        default=DEFAULT_PROMPT_FORMAT,
+        choices=sorted(PROMPT_FORMATS),
+        help="出力書式。A=現行 / B=出力例つき / C=先頭を「答え: X」に固定。"
+        "★測定条件なので、変えるときは preregister.md に書いてから",
     )
 
 

@@ -1,4 +1,4 @@
-# scripts/ — ラン `jmmlu-shuffle-02` の実行手順
+# scripts/ — ラン `jmmlu-shuffle-03` の実行手順
 
 **実験の設定は [preregister.md](../preregister.md) が正。** ここにあるのは、その設定を
 取り違えずに実行するための道具である。数値がここと preregister で食い違ったら
@@ -17,13 +17,27 @@
 | 1 | `10-bootstrap.sh` | インスタンス内 | Ollama 導入・決定性のための設定・GGUF 取得・`verify` |
 | 2 | `20-rebuild-benchmark.sh` | インスタンス内 | JMMLU を **pin した SHA** から作り直し、manifest と照合 |
 | 3 | `30-record-environment.sh` | インスタンス内 | 版と GGUF の SHA256 を記録。**環境タグを確定** |
-| 4 | `40-pilot.sh 1` | インスタンス内 | パイロット①(70問・`identity`)採点の健全性と床効果 |
-| 5 | `50-check-determinism.sh` | インスタンス内 | **GPU での決定性を実測**(ここが今回の要) |
-| 6 | `40-pilot.sh 2` | インスタンス内 | パイロット②(250問・`shuffle_choices`)ψ の実測 |
-| 7 | `60-production.sh dev` | インスタンス内 | 本番 DEV。問題数は ψ の写像表が決める |
-| 8 | `60-production.sh holdout` | インスタンス内 | **1構成・1回だけ。取り返しがつかない** |
+| 4 | `35-select-format.sh` | インスタンス内 | パイロット⓪(150問・`identity`・3書式)**出力書式を確定**(2026-08-07 追加) |
+| 5 | `40-pilot.sh 1` | インスタンス内 | パイロット①(70問・`identity`)採点の健全性と床効果 |
+| 6 | `50-check-determinism.sh` | インスタンス内 | **GPU での決定性を実測** |
+| 7 | `40-pilot.sh 2` | インスタンス内 | パイロット②(250問・`shuffle_choices`)ψ の実測 |
+| 8 | `60-production.sh dev` | インスタンス内 | 本番 DEV。問題数は ψ の写像表が決める |
+| 9 | `60-production.sh holdout` | インスタンス内 | **1構成・1回だけ。取り返しがつかない** |
 
 各段は前の段の出力を事前条件として確認するので、飛ばすと止まる。
+`30` は `reports/env-tag` を、**`35` は `reports/prompt-format` を**焼き、
+後段は `require_env_tag` / `require_prompt_format` でそれを要求する。
+
+> [!important] ★ 段 4(`35-select-format.sh`)は 2026-08-07 に足した
+> ラン `jmmlu-shuffle-02` は「記号だけを答えてください」という**出力書式**に
+> `llmjp3-13b` が乗らず、解釈不能率 5% 超で脱落して中止になった。
+> 03 では**書式を候補3つから選び直す**。設計と、それが「落ちたモデルが通る条件を
+> 落ちたのを見てから選ぶ」ことにならないための4つの装置は
+> preregister「ラン: jmmlu-shuffle-03」にある。**先にそれを読むこと。**
+>
+> 段 5 以降は `--prompt-format "$(prompt_format)"` を自動で渡す。**手で書式を指定しない。**
+> 段ごとに違う書式で測ると、キャッシュキーが分かれて呼び出しが無駄になるだけでなく、
+> **正解率と ψ が段をまたいで比較できなくなる。**
 
 ## ⚠️ AWS の GPU クォータは**否認された**(2026-08-06)
 
@@ -44,7 +58,7 @@ Service Quotas の申請履歴は `CASE_OPENED` のまま更新されていな�
 **API のステータスを承認の根拠にしない**(サポートケース側が正)。
 
 → **AWS 以外の GPU ホストで走らせる。** 手順は下記。`00-launch-ec2.ps1` を使わない
-だけで、**インスタンス内の 1〜8 段はそのまま使える。**
+だけで、**インスタンス内の 1〜9 段はそのまま使える。**
 
 ## EC2 以外の GPU ホストで走らせる
 
@@ -124,6 +138,7 @@ bash scripts/20-rebuild-benchmark.sh
 CONTAMLAB_ENV_TAG=lambda-a100-40gb-20260806 bash scripts/30-record-environment.sh
 
 #   → reports/environment.<tag>.md を preregister の「実行環境」枠に貼ってから次へ
+bash scripts/35-select-format.sh    # ★ 出力書式を確定(2026-08-07 追加)
 bash scripts/40-pilot.sh 1
 bash scripts/50-check-determinism.sh
 bash scripts/40-pilot.sh 2
@@ -181,6 +196,7 @@ bash scripts/20-rebuild-benchmark.sh
 bash scripts/30-record-environment.sh
 #   ★ ここで reports/environment.<tag>.md を preregister の「実行環境」枠へ貼る。
 #     貼るまで 40 へ進まない(下の「3. 実行環境」)。
+bash scripts/35-select-format.sh    # ★ 出力書式を確定(2026-08-07 追加)
 bash scripts/40-pilot.sh 1
 bash scripts/50-check-determinism.sh
 bash scripts/40-pilot.sh 2
@@ -231,6 +247,21 @@ prefix 安定(`benchmark.py:227`)なので **70 ⊂ 250 ⊂ 本番 1,270** と�
 別に確かめる設計だった。02 ではロースターが2本なので、**①②を最初からロースター
 2本で回せば③の目的(モデル別の解釈不能率と ψ)は同時に満たされる。**
 `40-pilot.sh` は分割表からモデル別の ψ を計算して表示する。
+
+### 4. 出力書式を候補3つから選び直す(2026-08-07 追加)✅ 記載済み
+
+preregister「ラン: jmmlu-shuffle-03」+ 変更履歴 2026-08-07。**何も測る前に書いた。**
+
+**動機は結果を見た後**である(02 で `llmjp3-13b` が書式で脱落した)ことを明記したうえで、
+「落ちたモデルが通る条件を落ちたのを見てから選ぶ」ことにならないための装置を4つ置いた:
+**選定指標は解釈不能率だけ**(`35-select-format.sh` の要約は `accuracy_*` も `drop` も
+`p_value` も**コードに出てこない**)/ **摂動器は `identity` 固定**で摂動後の応答を1件も
+見ない / **選定は DEV・検定は HOLDOUT** で統計量が別データ / **候補3書式を凍結し、
+合格ゼロなら4つ目を作らず本番を実行しない。**
+
+**同時に動かさないもの**: 採点器(`select`)は凍結。3書式とも既存の規則2・規則3で読める。
+**失効する値**: 想定 ψ=0.4050 と必要問題数 1,270 は書式 A の測定値なので引き継がない
+(パイロット②で測り直す。写像表は書式に依存しないのでそのまま使う)。
 
 ### 3. 実行環境 ❌ **未記入 —— 残っているのはこれだけ**
 

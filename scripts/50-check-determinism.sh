@@ -21,8 +21,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 require_ollama
 require_env_tag
+require_prompt_format
 CACHE_A="$(cache_path)"
 CACHE_B="$(det_cache_path)"
+PROMPT_FORMAT="$(prompt_format)"
 RESULT_A="reports/pilot1.$(env_tag).json"
 RESULT_B="reports/determinism.$(env_tag).json"
 
@@ -47,7 +49,7 @@ fi
 
 $PY -m contamlab run \
   --benchmark "$BENCHMARK" --seed "$DEV_SEED" --split dev --sample-n "$SAMPLE_N" \
-  --perturbator "$PERTURBATOR" \
+  --perturbator "$PERTURBATOR" --prompt-format "$PROMPT_FORMAT" \
   --target-effect "$TARGET_EFFECT" --expected-discordant-rate "$EXPECTED_PSI" \
   --k 1 --yes --cache "$CACHE_B" --json "$RESULT_B" $(model_flags)
 

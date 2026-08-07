@@ -11,6 +11,9 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 3. [preregister.md](preregister.md) の「測定条件」と「変更履歴」
 4. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — **直近のランは中止で終わっている。**
    何が言えて何が言えないか、次に決めるべき1点(**出力書式**)がまとまっている
+5. [preregister.md](preregister.md) の「**ラン: jmmlu-shuffle-03**」 — その1点への答え。
+   **書式を候補3つから選び直す設計。まだ1問も測っていない。**
+   実行は [scripts/README.md](scripts/README.md) の段 4(`35-select-format.sh`)から
 
 ---
 
@@ -171,8 +174,12 @@ EC2 を前提にできなくなった。**判定基準は変わらない** —�
     食い違っていた)。**前例にしない。** 触る前に [program.md](program.md) の
     「採点規則を1度だけ変えた」の4条件を全部満たすか確認する
 - **依存パッケージを増やさない**(標準ライブラリのみ)
-- **測定条件**(`--temperature` / `--max-tokens` / 拡張思考 / 量子化 / 量子化提供元 /
-  実行系)を変えるときは、**事前確約に書いてから**変える
+- **測定条件**(`--temperature` / `--max-tokens` / **`--prompt-format`** / 拡張思考 /
+  量子化 / 量子化提供元 / 実行系)を変えるときは、**事前確約に書いてから**変える
+  - ⚠️ **出力書式は手で指定しない。** パイロット⓪(`35-select-format.sh`)が選んで
+    `reports/prompt-format` に焼き、後段が `prompt_format()` で読む。
+    候補は `runner.PROMPT_FORMATS` の3つで**凍結**されており、4つ目を足すのは
+    preregister「合格ゼロのときにやらないこと」が明示的に禁じている
 
 ## 環境メモ
 

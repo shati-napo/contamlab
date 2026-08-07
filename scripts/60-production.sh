@@ -18,6 +18,7 @@ esac
 
 require_ollama
 require_env_tag
+require_prompt_format   # ★ 書式はパイロット⓪が決める。本番で変えない
 TAG="$(env_tag)"
 PILOT2="reports/pilot2.$TAG.json"
 DETERMINISM="reports/determinism.$TAG.json"
@@ -77,6 +78,7 @@ echo "  → 必要問題数                   : $SAMPLE_N"
 EXPECTED_PSI="$PSI_UPPER"
 TARGET_EFFECT=0.05
 CACHE="$(cache_path)"
+PROMPT_FORMAT="$(prompt_format)"
 OUT="reports/production-$SPLIT.$TAG.json"
 
 banner "2. 設計"
@@ -126,7 +128,7 @@ fi
 banner "3. 実行"
 $PY -m contamlab run \
   --benchmark "$BENCHMARK" --seed "$DEV_SEED" --split "$SPLIT" --sample-n "$SAMPLE_N" \
-  --perturbator shuffle_choices \
+  --perturbator shuffle_choices --prompt-format "$PROMPT_FORMAT" \
   --target-effect "$TARGET_EFFECT" --expected-discordant-rate "$EXPECTED_PSI" \
   --k 1 --yes --cache "$CACHE" --json "$OUT" $(model_flags)
 
