@@ -23,14 +23,43 @@ from typing import Iterable, Protocol, Sequence, runtime_checkable
 
 from .benchmark import CHOICE_LABELS, Item
 
-# 「A」「(A)」「A.」「答え: A」「答えはA」のような先頭のラベルを拾う。
-# ラベルの後ろは区切り文字・空白・文末のいずれか。ここを緩めないと "Hydrogen" の H を
+# 「A」「(A)」「A.」「答え: A」「答えはA」「正解はAです」のような先頭のラベルを拾う。
+#
+# 2つの経路に分かれている(2026-08-07)。
+#
+# 1. **接頭辞あり**(`答え`/`正解` 等が実際に書かれている): ラベルの後ろは問わない。
+#    「正解はAです。…」のように日本語の文末表現が続いても拾う。接頭辞が「これはラベルだ」と
+#    宣言しているので、後ろの区切りに頼る必要がない。
+# 2. **接頭辞なし**(いきなり英字1文字): ラベルの後ろに区切り文字・空白・文末を要求する。
+#    緩めると「B は正しくない」のような**否定文の主語**を選択と誤読する。
+#
+# どちらの経路もラベル直後の**英数字は許さない**。ここを開けると "Hydrogen" の H を
 # ラベルと誤読する。
+#
+# 経路1を後から足したのは、docstring が「`答えはA`」を拾うと宣言していたのに実装が
+# ラベル直後に日本語を許さず、「正解はDです」で外れていたためである(preregister.md の
+# 変更履歴 2026-08-07)。
+#
+# ⚠️ **経路2を変えていないから既存の判定も変わらない、とは言えない。** 手元のキャッシュ
+# 942 応答で突き合わせたところ、33 件が新たに読めるようになった一方で **2 件は別の選択肢に
+# 移った。** 規則3が当たるようになると、従来その応答を担当していた**下流の規則4の
+# 出番が消える**ためである(どちらもモデルが「正解はDです」と明言しつつ本文で別の選択肢に
+# 言及した自己矛盾応答で、規則3を優先する新判定のほうが docstring の宣言に忠実)。
+_LABEL_PREFIX = r"(?:答え|回答|正解|正しい選択肢|Answer|answer)\s*[はがも]?\s*[:：]?\s*"
+_OPEN_BRACKET = r"[（(\[「『]?"
 _LEADING_LABEL = re.compile(
-    r"^\s*(?:答え|回答|正解|Answer|answer)?\s*[はが]?\s*[:：]?\s*"
-    r"[（(\[]?([A-Za-z])(?:[)）\]\.、,:：\s]|$)",
+    rf"^\s*(?:{_LABEL_PREFIX}{_OPEN_BRACKET}([A-Za-z])(?![A-Za-z0-9])"
+    rf"|{_OPEN_BRACKET}([A-Za-z])(?:[)）\]」』\.、,:：\s]|$))",
 )
 _WHITESPACE = re.compile(r"\s+")
+
+
+def _leading_label(text: str) -> str | None:
+    """先頭のラベル1文字。どちらの経路で当たったかを呼び出し側に見せない。"""
+    match = _LEADING_LABEL.match(text)
+    if match is None:
+        return None
+    return match.group(1) or match.group(2)
 
 
 def normalize(text: str) -> str:
@@ -77,7 +106,7 @@ def select(item: Item, raw: str) -> str | None:
     順に試す:
         1. 応答が選択肢の1つと完全一致
         2. 応答がラベル1文字だけ
-        3. 応答の先頭がラベル(「A.」「(A)」「答え: A」など)
+        3. 応答の先頭がラベル(「A.」「(A)」「答え: A」「正解はAです」など)
         4. 選択肢のうち**ちょうど1つ**が応答に含まれる
     """
     text = normalize(raw)
@@ -101,9 +130,9 @@ def select(item: Item, raw: str) -> str | None:
             return item.choices[index]
 
     # 3. 先頭のラベル
-    match = _LEADING_LABEL.match(text)
-    if match:
-        index = CHOICE_LABELS.index(match.group(1).upper())
+    label = _leading_label(text)
+    if label and label.upper() in CHOICE_LABELS:
+        index = CHOICE_LABELS.index(label.upper())
         if index < len(item.choices):
             return item.choices[index]
 

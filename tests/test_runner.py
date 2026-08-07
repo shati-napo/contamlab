@@ -103,6 +103,46 @@ class TestSelect:
         """4択に Z はない。ラベルとして読まず、次の手段に落ちる。"""
         assert select(_item(), "Z") is None
 
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("正解はAです。水素の元素記号は H である。", "H"),
+            ("正解はBです", "He"),
+            ("答えはCです。", "Li"),
+            ("回答はDです", "O"),
+            ("正解は「A」です。", "H"),
+            ("正しい選択肢はBです", "He"),
+            ("Answer: A", "H"),
+        ],
+    )
+    def test_接頭辞があればラベル直後に日本語が続いても読み取れる(
+        self, raw: str, expected: str
+    ) -> None:
+        """「正解は**D**です」の「で」で外れていた回帰(preregister 2026-08-07)。
+
+        接頭辞が「これはラベルだ」と宣言しているので、後ろの区切りに頼らない。
+        """
+        assert select(_item(), raw) == expected
+
+    def test_接頭辞つきでも英数字が続けばラベルとして読まない(self) -> None:
+        """"Hydrogen" の H をラベルと誤読しない、という元の意図を保存する。
+
+        規則3で拾わないので規則4に落ち、"H" と "O" の両方を含んで曖昧なため None。
+        **ラベル H を選んだことにはしない**のが要点。
+        """
+        assert select(_item(), "正解は Hydrogen です") is None
+
+    def test_接頭辞なしの否定文はラベルとして読まない(self) -> None:
+        """「B は正しくない」を B と読むと誤採点になる。緩めた経路を分けた理由。"""
+        assert select(_item(), "Bは正しくない") is None
+
+    def test_接頭辞のラベルは本文の言及より優先する(self) -> None:
+        """モデルが自己矛盾したとき、宣言したラベルを採る(規則3 > 規則4)。
+
+        実測でこの形が2件あった(preregister 2026-08-07 の訂正)。
+        """
+        assert select(_item(), "正解はDです。これは He のことである。") == "O"
+
     def test_自由記述はそのまま返す(self) -> None:
         item = Item(id="q1", question="首都は?", answer="東京")
 
