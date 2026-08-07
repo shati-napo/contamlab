@@ -1150,7 +1150,42 @@ C は出力の形を指定する。
 
 <!-- ▼ ここに reports/environment.<tag>.md の中身を貼る ▼ -->
 
-*(未記入 —— ホストを借りた時点で埋める)*
+#### 実行環境(lambda-a100-40gb-20260807・2026-08-07 記録)
+
+| 項目 | 値 |
+|---|---|
+| 借り先 | **Lambda**(AWS の G/VT クォータが否認されたため EC2 ではない) |
+| インスタンス | `(EC2 外)` / `gpu_1x_a100_sxm4` / — |
+| GPU | NVIDIA A100-SXM4-40GB, 40960 MiB, 580.105.08 |
+| CUDA | 13.0 |
+| OS / カーネル | Ubuntu 22.04.5 LTS / 6.8.0-1046-nvidia |
+| Ollama | `ollama version is 0.32.6` |
+| Ollama の環境変数 | `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin OLLAMA_HOST=127.0.0.1:11434 OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_KEEP_ALIVE=30m OLLAMA_MODELS=/opt/ollama/models ` |
+| contamlab | `e4c6f7c` |
+| 応答キャッシュ | `data/cache/responses.lambda-a100-40gb-20260807.jsonl`(**この環境専用。02 のものは持ち込まない**) |
+
+| モデル | 取得元 | GGUF の SHA256 |
+|---|---|---|
+| `llmjp3-13b` | `hf.co/mmnga/llm-jp-3-13b-instruct3-gguf:Q4_K_M` | `9e46c803b89341f49469ade52fe539850e91a07ef524e0c6a99cd1148e44b60f` |
+| `swallow31-8b` | `hf.co/mmnga/Llama-3.1-Swallow-8B-Instruct-v0.5-gguf:Q4_K_M` | `6da177cee6797ad8f67cdaf6fac5d52818cc0582c7b0779c5c50ef419ca0b088` |
+
+> `OLLAMA_NUM_PARALLEL=1` は決定性のための設定である。並列実行はリクエストを
+> バッチにまとめるので、バッチの組み方で浮動小数の加算順序が変わりうる。
+> `temperature 0` は「最も確率の高い選択肢を選ぶ」であって「計算結果が同じになる」
+> ではない。決定性は宣言ではなく **scripts/50-check-determinism.sh の実測**で示す。
+
+> [!note] 02 との差分 —— **同型だが同一ホストではない**
+> GPU・ドライバ・CUDA・カーネル・Ollama の版・**GGUF の SHA256 は 02 と一致した。**
+> 違うのは contamlab の版(`90feaf8` → `e4c6f7c`)と**キャッシュファイル名**である。
+>
+> **一致していたことは、流用してよかったことを意味しない。** 一致は再記録して
+> 初めて分かることであり、確認せずに流用していたら「一致しているつもり」に
+> なっていた。ドライバか Ollama が上がっていれば別環境だった。
+>
+> ⚠️ **キャッシュはそれでも分ける。** 02 のキャッシュには**書式 A の応答**が入っており、
+> 持ち込むと 03 の書式 A がキャッシュに当たって
+> **モデルを一度も呼ばずに「測った」ことになる**([CLAUDE.md](CLAUDE.md) の「静かな混入」)。
+> ハードが同じでも、これは環境の同一性とは別の問題である。
 
 ### パイロット⓪ の結果(★ **実行後に埋める**・判定は下の規則をそのまま適用する)
 
@@ -1184,6 +1219,16 @@ C は出力の形を指定する。
 ---
 
 ## 変更履歴
+
+- **2026-08-07**: **ラン 03 の[実行環境](#実行環境-パイロット-を走らせる前に埋める2026-08-07-に枠を用意)を記録した**(**結果を見る前**)。
+  Lambda で `gpu_1x_a100_sxm4` を借り、`10-bootstrap.sh` → `20-rebuild-benchmark.sh` →
+  `30-record-environment.sh` を通した時点で貼った。**パイロット⓪ はまだ1問も測っていない。**
+  環境タグ `lambda-a100-40gb-20260807`、キャッシュは新規。
+
+  GPU・ドライバ・CUDA・カーネル・Ollama の版・**GGUF の SHA256 は 02 と一致した**が、
+  **一致は再記録して初めて分かることである。** 確認せずに流用していたら
+  「一致しているつもり」になっていた。ベンチマークも pin した `762cbf19` から作り直し、
+  **6,664 / DEV 4,742 / HOLDOUT 1,922 が凍結値と完全一致**することを確かめてある。
 
 - **2026-08-07**: **ラン `jmmlu-shuffle-03` を開始し、出力書式を選び直すことにした**
   —— **これは結果を見る前の変更である。** 何も測っていない状態でこの節を書いた。

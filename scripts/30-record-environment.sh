@@ -168,4 +168,4 @@ MD_OUT="reports/environment.$TAG.md"
 } > "$MD_OUT"
 
 echo "  $JSON_OUT"
-echo "  $MD_OUT   ← ★ この中身を preregister.md の jmmlu-shuffle-02 節に貼る"
+echo "  $MD_OUT   ← ★ この中身を preregister.md の**今のラン**の「実行環境」節に貼る"
