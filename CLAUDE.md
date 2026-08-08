@@ -6,12 +6,17 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 
 ## ▶ 作業を始める前に必ず読む
 
-1. **この文書の「絶対禁止」** — 破ると研究資産が回復不能になる
-2. [program.md](program.md) の「変えてよいもの / いけないもの」と「前回までの学び」
-3. [preregister.md](preregister.md) の「測定条件」と「変更履歴」
-4. [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) — **直近のランは 2026-08-07 に完走した。**
+1. **[docs/NEXT.md](docs/NEXT.md) — 再開点。**前回の状態と「次の一手」。**ここから始める**
+2. **この文書の「絶対禁止」** — 破ると研究資産が回復不能になる
+3. [program.md](program.md) の「変えてよいもの / いけないもの」と「前回までの学び」
+4. [preregister.md](preregister.md) の「測定条件」と「変更履歴」
+5. [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) — **直近のランは 2026-08-07 に完走した。**
    結論・何が言えて何が言えないか・**次に決めること**(§6)がまとまっている
-5. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — その前のラン(中止)。経緯の参照用
+6. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — その前のラン(中止)。経緯の参照用
+
+> [!note] 現在地(2026-08-08)
+> **公開済み**(PUBLIC)。次は **[docs/NEXT.md](docs/NEXT.md) のステップ1** —— Nejumi の
+> 問題ごとの正誤が取れるかを **1 時間で**確かめる。**測定はしない。**
 
 > [!warning] ⚠️ **HOLDOUT は 2026-08-07 に開封・消費した(K = 1 / 10)**
 > 「1構成・1回だけ開封」の規則により、**同じ HOLDOUT でもう一度検定することはできない。**
