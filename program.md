@@ -133,7 +133,7 @@ commit	adjusted_lcb	drop_se	observed_psi	status	description
 - **尤度ベースの手法(MIA / Min-K% / 交換可能性検定)に手を出さない。**
   Claude・OpenAI が log-prob を返さず、かつ MIA は現実設定でほぼランダムと示されている
 - **`ollama` は PATH に無い。** 実体は
-  `C:\Users\kingo\AppData\Local\Programs\Ollama\ollama.exe`。`ollama ps` / `ollama list` が
+  `%LOCALAPPDATA%\Programs\Ollama\ollama.exe`。`ollama ps` / `ollama list` が
   失敗してもサービスは生きている可能性が高い。**状態確認は CLI ではなく API で行う** ——
   `Invoke-RestMethod http://localhost:11434/api/ps`。
   **ランの進捗は `data/cache/responses.jsonl` の行数**で見る(追記専用なので代理指標になる)

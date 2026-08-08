@@ -188,7 +188,7 @@ EC2 を前提にできなくなった。**判定基準は変わらない** —�
 ## 環境メモ
 
 - `ollama` は PATH に無い。実体は
-  `C:\Users\kingo\AppData\Local\Programs\Ollama\ollama.exe`。
+  `%LOCALAPPDATA%\Programs\Ollama\ollama.exe`。
   状態確認は CLI ではなく API で —— `Invoke-RestMethod http://localhost:11434/api/ps`
 - Ollama のモデル名のコロンが `compat:NAME:MODEL_ID:BASE_URL` の解析を壊す
   ([clients.py:344](contamlab/clients.py#L344))。`ollama cp` でコロン無しの別名を作る。

@@ -109,12 +109,12 @@ H100 は要らない。8B/13B の Q4(最大 8.4GB)に 80GB は過剰で、単価
 
 ```powershell
 # ① bundle を作り直す(コミットを足したなら必須)
-git bundle create C:\Users\kingo\projects\contamlab.bundle --all
-git bundle verify C:\Users\kingo\projects\contamlab.bundle
+git bundle create <作業ディレクトリ>\contamlab.bundle --all
+git bundle verify <作業ディレクトリ>\contamlab.bundle
 
 # ② Lambda に登録する公開鍵。**AWS 用に作った鍵をそのまま使い回せる**
-#    (ed25519。秘密鍵は C:\Users\kingo\.ssh\contamlab.pem のまま動かさない)
-ssh-keygen -y -f C:\Users\kingo\.ssh\contamlab.pem
+#    (ed25519。秘密鍵は置き場所から動かさない)
+ssh-keygen -y -f <秘密鍵のパス>
 #    → 出力を Lambda のコンソールの SSH keys に貼る
 ```
 
@@ -122,8 +122,8 @@ ssh-keygen -y -f C:\Users\kingo\.ssh\contamlab.pem
 
 ```powershell
 # <IP> は Lambda のコンソールが表示する
-scp -i C:\Users\kingo\.ssh\contamlab.pem C:\Users\kingo\projects\contamlab.bundle ubuntu@<IP>:~
-ssh -i C:\Users\kingo\.ssh\contamlab.pem ubuntu@<IP>
+scp -i <秘密鍵のパス> <作業ディレクトリ>\contamlab.bundle ubuntu@<IP>:~
+ssh -i <秘密鍵のパス> ubuntu@<IP>
 ```
 
 #### ホスト内
@@ -175,16 +175,16 @@ $aws = "C:\Program Files\Amazon\AWSCLIV2\aws.exe"
     --quota-code L-DB2E81BA --region ap-northeast-1 --query "Quota.Value" --output text
 
 # ② bundle を作り直す(コミットを足したなら必須。足していないなら不要)
-git bundle create C:\Users\kingo\projects\contamlab.bundle --all
+git bundle create <作業ディレクトリ>\contamlab.bundle --all
 
 # ③ 起動。まず表示だけ(課金しない)→ 内容を見てから -Execute
-cd C:\Users\kingo\projects\contamlab
-.\scripts\00-launch-ec2.ps1 -KeyName contamlab -SecurityGroupId sg-0871cee36a8152bc6
-.\scripts\00-launch-ec2.ps1 -KeyName contamlab -SecurityGroupId sg-0871cee36a8152bc6 -Execute
+cd <リポジトリのパス>
+.\scripts\00-launch-ec2.ps1 -KeyName <鍵ペア名> -SecurityGroupId <SG ID>
+.\scripts\00-launch-ec2.ps1 -KeyName <鍵ペア名> -SecurityGroupId <SG ID> -Execute
 
 # ④ 転送して入る(<IP> は ③ が表示する)
-scp -i C:\Users\kingo\.ssh\contamlab.pem C:\Users\kingo\projects\contamlab.bundle ubuntu@<IP>:~
-ssh -i C:\Users\kingo\.ssh\contamlab.pem ubuntu@<IP>
+scp -i <秘密鍵のパス> <作業ディレクトリ>\contamlab.bundle ubuntu@<IP>:~
+ssh -i <秘密鍵のパス> ubuntu@<IP>
 ```
 
 インスタンス内:
