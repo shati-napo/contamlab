@@ -37,3 +37,12 @@ data/*.jsonl
 # 作ると、どの行にも当てはまらず `git add -A` で入ってしまう。**全部落として例外だけ通す。**
 *.jsonl
 !data/example.jsonl
+
+# ラン positive-control-01(2026-08-09)
+# 注入した item.id は**公開 salt から誰でも再生成できる**ので秘匿情報ではないが、
+# 派生物なので配らない。追跡するのは data/injection/manifest.json のほう
+# (件数・入れ子・各ファイルの sha256 が入っており、第三者はこれと salt で検証できる)。
+data/injection/*.ids
+# 学習済み重みと GGUF。数 GB あるので Git には置かない。
+models/
+finetune/.venv/

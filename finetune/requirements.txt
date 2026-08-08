@@ -1,0 +1,11 @@
+# finetune/ 専用。★ contamlab の pyproject.toml には絶対に足さない。
+# 学習・変換にしか使わず、contamlab パッケージからは import しない。
+#
+# バージョンは上限を切る。CUDA 12 系の Lambda A10 で動く組み合わせ。
+torch==2.5.1
+transformers==4.46.3
+peft==0.13.2
+accelerate==1.1.1
+datasets==3.1.0
+pyarrow==18.1.0
+sentencepiece==0.2.0
