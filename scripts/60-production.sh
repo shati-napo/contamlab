@@ -34,34 +34,82 @@ read -r PSI_HAT PSI_UPPER SAMPLE_N <<< "$(
   $PY - "$PILOT2" <<'PYEOF'
 import json, sys
 from contamlab.stats.distributions import clopper_pearson_upper
+from contamlab.stats.power import power_at_n
 
 data = json.load(open(sys.argv[1], encoding="utf-8"))
 n = data["sample"]["n_items"]
-psi_hat = data["sample"]["observed_discordant_rate"]
-discordant = round(psi_hat * n)
+models = data["models"]
 
-# ★ 使う ψ は実測値そのものではなく Clopper-Pearson の**上側限界**である。
-#   下側に誤ると検出力を過大評価する。パイロット②(01)自身がそれで
-#   達成検出力 0.791 < 目標 0.80 に終わった(program.md 2026-08-03 の学び)。
-#   両側95%の上側 = alpha 0.05 を両側に割る。
-psi_upper = clopper_pearson_upper(discordant, n, 0.05 / 2)
+# ★ 写像表は M=2 / 実効 α=0.0250 で作られている。M が変われば表ごと引き直しになるので、
+#   黙って別の M で引かない(preregister「M ≥ 2 のとき、どの ψ で写像表を引くか」)。
+if len(models) != 2:
+    sys.stderr.write(
+        f"\n★ ロースターが {len(models)} 本ある。写像表は M=2 専用(実効 α=0.0250)なので"
+        "そのままでは引けない。**表を流用せず、preregister で引き直してから実行すること。**\n"
+    )
+    sys.exit(1)
+
+# ★ M ≥ 2 では ψ はモデルごとに違う。**プール(全モデル平均)では引かない。**
+#   採用基準はモデルごとに照合されるので、基準3「事前の検出力 ≥ 0.80」も
+#   モデルごとに要求される。検出力は ψ が大きいほど下がるため、
+#   **最も不利なモデル(ψ の上側限界が最大のモデル)で設計するのが唯一の整合解**である。
+#   規則の導出は preregister「★ M ≥ 2 のとき、どの ψ で写像表を引くか(2026-08-08)」。
+#
+#   読むのは 2×2 表の不一致ペアだけ。パイロット②で drop / p_value / adjusted_lcb を
+#   読まないという規則は動いていない。
+per_model = []
+for m in models:
+    t = m["table"]
+    discordant = t["only_original"] + t["only_perturbed"]
+    # ★ 使う ψ は実測値そのものではなく Clopper-Pearson の**上側限界**である。
+    #   下側に誤ると検出力を過大評価する。パイロット②(01)自身がそれで
+    #   達成検出力 0.791 < 目標 0.80 に終わった(program.md 2026-08-03 の学び)。
+    #   両側95%の上側 = alpha 0.05 を両側に割る。
+    upper = clopper_pearson_upper(discordant, n, 0.05 / 2)
+    per_model.append((m["name"], discordant / n, upper))
+
+worst_name, psi_hat, psi_upper = max(per_model, key=lambda r: r[2])
 
 # preregister「ψ → 必要問題数の写像」。**値を見る前に固定した表**。
 # 表に無い ψ は直近上位の行に丸める(保守側に倒す)。
 TABLE = [(0.2000, 626), (0.2500, 783), (0.3000, 940), (0.3500, 1097),
          (0.4050, 1270), (0.4500, 1411), (0.5000, 1568)]
 
+required_n = 0
 for threshold, required in TABLE:
     if psi_upper <= threshold:
-        print(f"{psi_hat:.4f} {psi_upper:.4f} {required}")
+        required_n = required
         break
-else:
-    print(f"{psi_hat:.4f} {psi_upper:.4f} 0")
+
+# ★ モデル別の検出力は harness の出力に存在しない —— harness.py:175 は全モデルを
+#   平均した不一致率で observed_power を出す(編集禁止領域なので直せない)。
+#   採用基準3 の照合に使えるのはここで印字する値のほうである。**報告に必ず載せる。**
+sys.stderr.write("\n  モデル別の ψ(★ 設計は最大値で決まる)\n")
+for name, hat, upper in per_model:
+    mark = " ← ★ 最大" if name == worst_name else ""
+    if required_n:
+        pw = f"{power_at_n(required_n, 0.05, upper, alpha=0.025, one_sided=True):.3f}"
+    else:
+        pw = "—"
+    sys.stderr.write(
+        f"    {name:16s} psi_hat={hat:.4f}  CP上側={upper:.4f}  "
+        f"n={required_n or '—'} での検出力={pw}{mark}\n"
+    )
+sys.stderr.write("\n")
+
+print(f"{psi_hat:.4f} {psi_upper:.4f} {required_n}")
 PYEOF
 )"
 
-echo "  実測 ψ̂                        : $PSI_HAT"
-echo "  Clopper-Pearson 両側95%上側    : $PSI_UPPER   ← ★ 設計にはこちらを使う"
+# 抽出が異常終了すると read は空を掴む。**空のまま先へ進めない**
+# (M≠2 で止めた場合がこれに当たる。コマンド置換の exit は外側に伝わらない)。
+if [[ -z "$SAMPLE_N" ]]; then
+  echo "★ ψ の抽出が失敗した。上のメッセージを読んで原因を潰すまで進まないこと。" >&2
+  exit 1
+fi
+
+echo "  最も不利なモデルの ψ̂           : $PSI_HAT"
+echo "  Clopper-Pearson 両側95%上側    : $PSI_UPPER   ← ★ 設計にはこちらを使う(全モデルの最大)"
 if [[ "$SAMPLE_N" == "0" ]]; then
   cat >&2 <<EOF
 
