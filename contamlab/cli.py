@@ -427,6 +427,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # 出力は全部日本語である。日本語を表示できないコンソール(非日本語ロケールの
+    # Windows は既定が cp1252 など)では、最初の print が UnicodeEncodeError で落ちる。
+    # 測定とは無関係なところで exit 1 になり、しかも原因が分からない。
+    # 表示できない文字は置換して続行させる。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:  # リダイレクト先が TextIOWrapper でないことがある
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
     args = build_parser().parse_args(argv)
     return args.func(args)
 

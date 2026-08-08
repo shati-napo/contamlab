@@ -25,10 +25,17 @@ python -m contamlab power --effect 0.05 --discordant-rate 0.30
 python -m contamlab power --n 800 --discordant-rate 0.30 --effect 0.05
 
 # ③ 摂動を目で確かめる(正解が壊れていないこと)
-python -m contamlab perturb --benchmark data/bench.jsonl --seed dev-seed --limit 3
+#    data/example.jsonl は★架空の8問。問題インスタンスは同梱していない
+python -m contamlab perturb --benchmark data/example.jsonl --seed dev-seed --limit 3
 
-# ④ 本番
-python -m contamlab run --benchmark data/bench.jsonl --seed dev-seed \
+# ④ 一通り動かす(合成問題。データも API キーも不要・課金 0 回)
+python -m contamlab run --synthetic 1000 --seed dev-seed \
+  --target-effect 0.05 --expected-discordant-rate 0.30 --k 1 \
+  --model fake:demo:0.6 --json reports/run.json
+
+# ⑤ 本番。まずベンチマークを組み立てる(JSONL は追跡しない。manifest から再現する)
+python tools/ingest_jmmlu.py --out data/jmmlu.jsonl
+python -m contamlab run --benchmark data/jmmlu.jsonl --seed dev-seed \
   --target-effect 0.05 --expected-discordant-rate 0.30 --k 1 \
   --model fake:demo:0.6 --json reports/run.json
 ```
@@ -78,7 +85,7 @@ python -m contamlab verify
 
 ```powershell
 # ① 見積もりだけ出す(--yes が無ければ課金されない)
-python -m contamlab run --benchmark data/bench.jsonl --seed dev-seed `
+python -m contamlab run --benchmark data/jmmlu.jsonl --seed dev-seed `
   --target-effect 0.05 --expected-discordant-rate 0.30 `
   --model anthropic:claude:claude-opus-5 --model openai:gpt:gpt-4o
 

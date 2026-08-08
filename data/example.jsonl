@@ -1,0 +1,10 @@
+// 動作確認用の例。★実在のベンチマークではなく、この場で作った架空の問題である。
+// 本物のベンチマークをこのリポジトリに置かないこと(公開した瞬間に汚染される)。
+{"id":"ex-001","question":"水素の元素記号は?","answer":"H","choices":["H","He","Li","O"],"published_at":"2024-05-01","source":"example","metadata":{"subject":"化学"}}
+{"id":"ex-002","question":"日本の首都は?","answer":"東京","choices":["東京","大阪","京都","名古屋"],"published_at":"2024-05-01","source":"example","metadata":{"subject":"地理"}}
+{"id":"ex-003","question":"1 + 1 は?","answer":"2","choices":["1","2","3","4"],"published_at":"2025-11-01","source":"example","metadata":{"subject":"算数"}}
+{"id":"ex-004","question":"太陽系で最も大きい惑星は?","answer":"木星","choices":["地球","火星","木星","土星"],"published_at":"2025-11-01","source":"example","metadata":{"subject":"天文"}}
+{"id":"ex-005","question":"水の化学式は?","answer":"H2O","choices":["H2O","CO2","NaCl","O2"],"source":"example","metadata":{"subject":"化学"}}
+{"id":"ex-006","question":"1年は何か月?","answer":"12","choices":["10","11","12","13"],"published_at":"2026-01-15","source":"example","metadata":{"subject":"常識"}}
+{"id":"ex-007","question":"光の速さに最も近いのは?","answer":"約30万km/秒","choices":["約3万km/秒","約30万km/秒","約300万km/秒","約3000万km/秒"],"published_at":"2026-01-15","source":"example","metadata":{"subject":"物理"}}
+{"id":"ex-008","question":"三角形の内角の和は?","answer":"180度","choices":["90度","180度","270度","360度"],"published_at":"2026-01-15","source":"example","metadata":{"subject":"数学"}}

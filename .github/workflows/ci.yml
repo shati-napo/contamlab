@@ -1,0 +1,49 @@
+# テストと自己検査。
+#
+# ★ シークレットを一切使わない。実 API を叩くテストは無く、モデル呼び出しは
+#   すべて FakeModel と合成問題で完結する。CI が課金することはない。
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: インストール(依存パッケージは標準ライブラリのみ)
+        run: python -m pip install -e ".[dev]"
+
+      - name: pytest
+        run: python -m pytest -q
+
+      # 統計層と摂動器が壊れていれば全実験が無価値になる。
+      # program.md が「ランの開始時に1回」と定めている検査を CI でも回す。
+      - name: 測定装置の健全性チェック
+        run: python -m contamlab verify
+
+      # 出力は全部日本語である。日本語を出せない端末で落ちないことを固定する
+      # (cli.main の stdout 再設定の回帰テスト)。
+      - name: 非日本語ロケールでも落ちないこと
+        if: runner.os == 'Linux'
+        env:
+          PYTHONIOENCODING: ascii
+          LC_ALL: C
+        run: python -m contamlab power --effect 0.05 --discordant-rate 0.30

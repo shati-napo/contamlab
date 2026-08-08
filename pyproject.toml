@@ -9,6 +9,30 @@ description = "LLM ベンチマークの汚染を、検定・信頼区間・検�
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+authors = [{ name = "shati-napo" }]
+keywords = [
+    "llm",
+    "benchmark-contamination",
+    "data-contamination",
+    "evaluation",
+    "statistical-power",
+    "preregistration",
+    "japanese",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Natural Language :: Japanese",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Repository = "https://github.com/shati-napo/contamlab"
+Issues = "https://github.com/shati-napo/contamlab/issues"
 
 # 依存パッケージを持たない。統計層が成果物の中心なので、scipy に隠れた実装を
 # 信用する代わりに式をそのまま書き、既知の表値への回帰テストで固定している。

@@ -48,13 +48,30 @@ contamlab power --effect 0.05 --discordant-rate 0.30
 contamlab verify
 
 # ③ 摂動を目で確かめる(正解が壊れていないこと)
-contamlab perturb --benchmark data/bench.jsonl --seed dev-seed --limit 3
+#    同梱の data/example.jsonl は★架空の8問。実在のベンチマークではない
+contamlab perturb --benchmark data/example.jsonl --seed dev-seed --limit 3
 
-# ④ 本番
-contamlab run --benchmark data/bench.jsonl --seed dev-seed \
+# ④ 一通り動かす。合成問題なのでデータも API キーも要らない(課金 0 回)
+contamlab run --synthetic 1000 --seed dev-seed \
   --target-effect 0.05 --expected-discordant-rate 0.30 --k 1 \
   --model fake:demo:0.6 --json reports/run.json
+
+# ⑤ ★門番が働くことを見る。8問では拒否され、exit 2 で止まる
+contamlab run --benchmark data/example.jsonl --seed dev-seed \
+  --target-effect 0.05 --expected-discordant-rate 0.30 --k 1 --model fake:demo:0.6
+#   → 「5.0 ポイントの汚染を検出力 0.80 で見るには 740 問要るが、手元には 6 問しかない」
 ```
+
+> [!important] **問題インスタンスは同梱していない。**
+> `data/` に追跡されているのは**目録**(`jmmlu.manifest.json`)と上の架空8問だけである。
+> 本物のベンチマークは手元で組み立てる ——
+>
+> ```powershell
+> python tools/ingest_jmmlu.py --out data/jmmlu.jsonl
+> ```
+>
+> 取得元・commit SHA・各 CSV の sha256・採用/除外の内訳が manifest に入っているので、
+> **同じ JSONL を誰でも再現できる。**配らない理由は下の「中心にある逆説」を見よ。
 
 ### 実 API を使う
 
@@ -62,7 +79,7 @@ contamlab run --benchmark data/bench.jsonl --seed dev-seed \
 Copy-Item .env.example .env    # ANTHROPIC_API_KEY などを書く
 
 # ① まず見積もりだけ出す(--yes を付けなければ課金されない)
-contamlab run --benchmark data/bench.jsonl --seed dev-seed `
+contamlab run --benchmark data/jmmlu.jsonl --seed dev-seed `
   --target-effect 0.05 --expected-discordant-rate 0.30 `
   --model anthropic:claude:claude-opus-5 `
   --model openai:gpt:gpt-4o `

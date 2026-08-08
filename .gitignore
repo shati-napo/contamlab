@@ -31,3 +31,9 @@ data/perturbed/
 data/raw/
 data/*.jsonl
 !data/*.manifest.json
+
+# ★ 保険(2026-08-08)。上は「この場所のこの名前」を1つずつ挙げる書き方なので、
+# 想定外の場所に出た JSONL を取りこぼす。実際 `perturbed.jsonl` をリポジトリ直下に
+# 作ると、どの行にも当てはまらず `git add -A` で入ってしまう。**全部落として例外だけ通す。**
+*.jsonl
+!data/example.jsonl
