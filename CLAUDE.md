@@ -9,11 +9,15 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 1. **この文書の「絶対禁止」** — 破ると研究資産が回復不能になる
 2. [program.md](program.md) の「変えてよいもの / いけないもの」と「前回までの学び」
 3. [preregister.md](preregister.md) の「測定条件」と「変更履歴」
-4. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — **直近のランは中止で終わっている。**
-   何が言えて何が言えないか、次に決めるべき1点(**出力書式**)がまとまっている
-5. [preregister.md](preregister.md) の「**ラン: jmmlu-shuffle-03**」 — その1点への答え。
-   **書式を候補3つから選び直す設計。まだ1問も測っていない。**
-   実行は [scripts/README.md](scripts/README.md) の段 4(`35-select-format.sh`)から
+4. [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) — **直近のランは 2026-08-07 に完走した。**
+   結論・何が言えて何が言えないか・**次に決めること**(§6)がまとまっている
+5. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — その前のラン(中止)。経緯の参照用
+
+> [!warning] ⚠️ **HOLDOUT は 2026-08-07 に開封・消費した(K = 1 / 10)**
+> 「1構成・1回だけ開封」の規則により、**同じ HOLDOUT でもう一度検定することはできない。**
+> 摂動器を増やすにも、別のベンチマークで新しい DEV / HOLDOUT を切るところからになる。
+> 選択肢は [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) の §6 に列挙してある。
+> **成果物(公開)を装置の改良より先に置くこと。**
 
 ---
 
