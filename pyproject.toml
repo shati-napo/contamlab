@@ -30,13 +30,16 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 
-[project.urls]
-Repository = "https://github.com/shati-napo/contamlab"
-Issues = "https://github.com/shati-napo/contamlab/issues"
-
 # 依存パッケージを持たない。統計層が成果物の中心なので、scipy に隠れた実装を
 # 信用する代わりに式をそのまま書き、既知の表値への回帰テストで固定している。
 dependencies = []
+
+# ★ 以降はテーブル。[project] の素の key は上に置ききること。
+#   ここに [project.urls] を挟むと、続く dependencies が project.urls.dependencies に
+#   吸われてビルドが落ちる(2026-08-08 に実際にやった。CI が捕まえた)。
+[project.urls]
+Repository = "https://github.com/shati-napo/contamlab"
+Issues = "https://github.com/shati-napo/contamlab/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
