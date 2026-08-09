@@ -274,17 +274,32 @@ pc-01 は「素の正解率 0.425 / 解釈不能率 0.5%」を根拠にベース
 
 ### 着手手順
 
-1. **実装**(規則ではなく規則の実装・未着手)
-   - [finetune/export_base.py](finetune/export_base.py) — 候補表を定数で持ち `--candidate 1|2`。
-     **HF id / revision をコマンドラインから自由に渡す口は作らない**
-   - 注入集合 — `pcbase-<name>-x00` を pc-01 の `pc-x00` から複製し、**前後で sha256 照合**
+1. ~~**実装**(規則ではなく規則の実装)~~
+   → **2026-08-09 完了。規則は1つも変えていない。課金ゼロ。テスト 408 件通過。**
+   - [finetune/export_base.py](finetune/export_base.py) — 候補表 `CANDIDATES` と `--candidate 1|2`。
+     **HF id / revision を渡す口は作っていない。** 候補0(pc-02 の第0段)も再現用に残した。
+     `check_order()` が候補①を飛ばすのを弾く —— ただし**確かめられるのは「前の候補を
+     作ったか」までで、「測って落ちたか」は分からない。柵であって担保ではない**
+   - [finetune/prepare_pc03_arms.py](finetune/prepare_pc03_arms.py)(新規)— 注入集合の複製。
+     **前後で sha256 照合**し、`n_injected != 0` なら拒否(pc-03 は注入しないラン)。
+     アーム名が候補表とずれていないかも機械照合
    - [scripts/30-record-environment.sh](scripts/30-record-environment.sh) —
-     **`data/jmmlu.jsonl` の生 sha256 を環境記録に出す**(pc-02 で見つけた CRLF/LF 分岐への対処)
-   - [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) — **触らない。**
-     `x00` 枝の関門は pc-02 で実装済み
-2. GPU を借りる → 実行環境の空欄を埋める → 候補①を関門にかける
-3. 通れば凍結して終了。落ちれば候補②。**2本とも落ちたら「全滅」として報告して終了**
-4. `positive-control-04`(梯子)を、ベースが決まってから事前登録する
+     **生 sha256・行数・CRLF の箇所数**を JSON と Markdown に出す。
+     [lib.sh](../scripts/lib.sh) の `JMMLU_MEASURED_SHA256_PREFIX` と違えば警告
+     (`CONTAMLAB_EXPECT_BENCHMARK_SHA256` を渡したときだけ機械的に停止)
+   - [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) — **1文字も変えていない。**
+     `pcbase-<name>-x00` は末尾2桁が `00` なのでそのまま陰性対照の枝に入る(実測確認済み)
+2. ⬜ **GPU を借りる → 実行環境の空欄を埋める → 候補①を関門にかける。★ 次の着手点**
+3. ⬜ 通れば凍結して終了。落ちれば候補②。**2本とも落ちたら「全滅」として報告して終了**
+4. ⬜ `positive-control-04`(梯子)を、ベースが決まってから事前登録する
+
+**箱の上での手順**(pc-02 と同じ器を使う):
+```bash
+python finetune/prepare_pc03_arms.py           # 注入集合の複製(sha256 照合つき)
+python finetune/export_base.py --candidate 1   # 候補①を bf16 で書き出す
+bash   finetune/to_gguf.sh pcbase-swallow31-8b-x00
+bash   scripts/65-manipulation-check.sh pcbase-swallow31-8b-x00
+```
 
 ## 何をするか
 
@@ -329,9 +344,10 @@ pc-01 は「素の正解率 0.425 / 解釈不能率 0.5%」を根拠にベース
    → **2026-08-09 実行。★ 第0段で停止(解釈不能率 14.50% > 5%)。** 梯子は1本も走らせていない
 10. ~~**pc-03 の事前登録**(ベースの選び直し)~~
     → **2026-08-09 完了。候補を1本も測る前に書き切った。** 上の「▶ ラン positive-control-03」が正
-11. ⬜ **pc-03 の実装**(`export_base.py` の候補表 / 注入集合の複製 / 環境記録に生 sha256)。
-    ★ **ここが次の着手点。課金ゼロで終わる**
-12. ⬜ **GPU を借りる → 候補①を関門にかける(約1時間・$4 見込み)** → 通ればベースを凍結して終了
+11. ~~**pc-03 の実装**(`export_base.py` の候補表 / 注入集合の複製 / 環境記録に生 sha256)~~
+    → **2026-08-09 完了。規則は1つも変えていない。テスト 408 件通過。課金ゼロ**
+12. ⬜ **GPU を借りる → 候補①を関門にかける(約1時間・$4 見込み)** → 通ればベースを凍結して終了。
+    ★ **ここが次の着手点**
 13. ⬜ **`positive-control-04`(梯子 R0〜R4)の事前登録。ベースが決まってから。**
     費用の見積もりもそこで実測に基づいて出す
 

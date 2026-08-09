@@ -107,6 +107,46 @@ for layer in layers:
   GGUF_SHA["$name"]="$digest"
 done
 
+banner "ベンチマークの同一性(生の sha256)"
+# ★ 2026-08-09、ラン positive-control-03 で新設した欄。
+#   preregister「ラン: positive-control-03」→「実行環境」が正。
+#
+#   ★ なぜ manifest 照合だけでは足りないのか ★
+#   pc-02 の実行中に判明した —— **manifest が完全一致してもバイトは一致しないことがある。**
+#   `$BENCHMARK` は .gitignore 済みで各環境で作り直すため、作った OS によって
+#   問題文中の改行が `\r\n`(Windows)と `\n`(Linux)に割れる(1,801 箇所)。
+#   **件数も id も一致するので、20-rebuild-benchmark.sh の照合はこの差を検出しない。**
+#   影響は「応答キャッシュが OS 間で移植できない」「再現が静かにずれる」ことである。
+#   **静かに間違う型の失敗なので、生の sha256 を来歴に残す。**
+BENCH_SHA=""; BENCH_LINES=""; BENCH_CRLF=""
+if [[ -r "$BENCHMARK" ]]; then
+  BENCH_SHA="$(sha256sum "$BENCHMARK" | cut -d' ' -f1)"
+  BENCH_LINES="$(wc -l < "$BENCHMARK" | tr -d '[:space:]')"
+  # JSON 文字列の中に埋まった改行(`\r\n` の 4 バイト)を数える。ここが割れる。
+  BENCH_CRLF="$($PY -c '
+import sys
+data = open(sys.argv[1], "rb").read()
+print(data.count(rb"\r\n") + data.count(b"\x0d\x0a"))
+' "$BENCHMARK")"
+  printf '  %-16s %s\n' "sha256" "$BENCH_SHA"
+  printf '  %-16s %s 行 / CRLF %s 箇所\n' "内訳" "$BENCH_LINES" "$BENCH_CRLF"
+  if [[ "$BENCH_SHA" != "$JMMLU_MEASURED_SHA256_PREFIX"* ]]; then
+    echo "  ★ pc-01 / pc-02 が測った版(${JMMLU_MEASURED_SHA256_PREFIX}…)と違う。" >&2
+    echo "    CRLF が ${BENCH_CRLF} 箇所あるなら Windows で作った版である。" >&2
+    echo "    preregister pc-03 の停止条件に該当しうる。**先に確かめてから測ること。**" >&2
+  fi
+  # 完全一致を機械的に強制したいときだけ使う(既定では警告に留める)。
+  if [[ -n "${CONTAMLAB_EXPECT_BENCHMARK_SHA256:-}" \
+        && "$BENCH_SHA" != "$CONTAMLAB_EXPECT_BENCHMARK_SHA256" ]]; then
+    echo "★ ベンチマークの sha256 が指定と違う。測定に進んではいけない。" >&2
+    echo "    実測 $BENCH_SHA" >&2
+    echo "    指定 $CONTAMLAB_EXPECT_BENCHMARK_SHA256" >&2
+    exit 1
+  fi
+else
+  echo "  ★ $BENCHMARK が無い。先に 20-rebuild-benchmark.sh を走らせること。" >&2
+fi
+
 banner "書き出し"
 JSON_OUT="reports/environment.$TAG.json"
 MD_OUT="reports/environment.$TAG.md"
@@ -128,6 +168,10 @@ MD_OUT="reports/environment.$TAG.md"
   printf '  "contamlab_commit": "%s",\n' "$(git rev-parse HEAD 2>/dev/null || echo unknown)"
   printf '  "contamlab_dirty": %s,\n' "$([[ -n "$(git status --porcelain 2>/dev/null)" ]] && echo true || echo false)"
   printf '  "cache_path": "%s",\n' "$(cache_path)"
+  printf '  "benchmark_path": "%s",\n' "$BENCHMARK"
+  printf '  "benchmark_sha256": "%s",\n' "$BENCH_SHA"
+  printf '  "benchmark_lines": "%s",\n' "$BENCH_LINES"
+  printf '  "benchmark_crlf_count": "%s",\n' "$BENCH_CRLF"
   printf '  "models": [\n'
   first=1
   for entry in "${ROSTER[@]}"; do
@@ -153,6 +197,9 @@ MD_OUT="reports/environment.$TAG.md"
   echo "| Ollama の環境変数 | \`$(tr '\n' ' ' <<< "$OLLAMA_ENV")\` |"
   echo "| contamlab | \`$(git rev-parse --short HEAD 2>/dev/null || echo unknown)\` |"
   echo "| 応答キャッシュ | \`$(cache_path)\`(**この環境専用。CPU 時代のものは持ち込まない**) |"
+  echo "| ベンチマークの生 sha256 | \`${BENCH_SHA:-—}\` / ${BENCH_LINES:-—} 行 / CRLF ${BENCH_CRLF:-—} 箇所$( \
+       [[ -n "$BENCH_SHA" && "$BENCH_SHA" != "$JMMLU_MEASURED_SHA256_PREFIX"* ]] \
+       && echo " ← **★ pc-01 / pc-02 が測った版(${JMMLU_MEASURED_SHA256_PREFIX}…)と違う**" )|"
   echo
   echo "| モデル | 取得元 | GGUF の SHA256 |"
   echo "|---|---|---|"

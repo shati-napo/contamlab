@@ -2410,14 +2410,16 @@ pc-01・pc-02 の解釈不能率が変換経路に依存していたという意
 | 出力書式の固定 | ★未記入(**`reports/prompt-format` に `C` を書く。`35-select-format.sh` は再実行しない** —— pc-02 と同じ理由) |
 | 実測の GPU 時間と費用 | ★未記入 |
 
-#### 実装(★ **規則ではなく規則の実装**である)
+#### 実装(★ **規則ではなく規則の実装**である。2026-08-09 に完了)
 
-| 対象 | 変更 |
-|---|---|
-| [finetune/export_base.py](finetune/export_base.py) | 現状は `train_lora.py` の `BASE_MODEL` 定数を直読みし、アーム名も `pcbase-x00` 固定。**候補表を定数として持ち、`--candidate 1\|2` で選ぶ形にする。** pc-02 と同じく、**HF id や revision をコマンドラインから自由に渡せる口は作らない**(事前登録の外に出る口になる) |
-| 注入集合 | 候補ごとに `pcbase-<name>-x00` の `.jsonl` / `.ids` を pc-01 の `pc-x00` から複製し、**複製の前後で sha256 を照合**する([prepare_pc02_arms.py](finetune/prepare_pc02_arms.py) と同じ作法) |
-| [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) | **判定ロジックは触らない。** `x00` 枝の関門(正解率 ≥ 0.30・解釈不能率 ≤ 5%)は pc-02 で実装済みで、そのまま使う |
-| [scripts/30-record-environment.sh](scripts/30-record-environment.sh) | **`data/jmmlu.jsonl` の sha256 を環境記録に出す**(上の新設欄の実装) |
+| 対象 | 変更 | 状態 |
+|---|---|---|
+| [finetune/export_base.py](finetune/export_base.py) | 現状は `train_lora.py` の `BASE_MODEL` 定数を直読みし、アーム名も `pcbase-x00` 固定。**候補表を定数として持ち、`--candidate 1\|2` で選ぶ形にする。** pc-02 と同じく、**HF id や revision をコマンドラインから自由に渡せる口は作らない**(事前登録の外に出る口になる) | ✅ `CANDIDATES` / `PC03_ORDER`。**候補0(pc-02 の第0段)も再現用に表へ残した。** `check_order()` が「候補①を作らずに候補②へ飛ぶ」のを弾く —— ただし**確かめられるのは「前の候補を作ったか」までで、「測って落ちたか」までは分からない**(関門の判定は `65-manipulation-check.sh` 側にあり、落ちたときは何も書き残さない)。**うっかりを止める柵であって担保ではない**とコードにも書いた |
+| 注入集合 | 候補ごとに `pcbase-<name>-x00` の `.jsonl` / `.ids` を pc-01 の `pc-x00` から複製し、**複製の前後で sha256 を照合**する([prepare_pc02_arms.py](finetune/prepare_pc02_arms.py) と同じ作法) | ✅ [finetune/prepare_pc03_arms.py](finetune/prepare_pc03_arms.py)(新規)。複製の**前後**で pc-01 の `manifest.json` と照合し、`manifest-pc03.json` に記録。**さらに `n_injected != 0` なら複製を拒否する** —— pc-03 は注入しないランなので、注入のあるファイルが混ざれば「注入していない」という主張が崩れる。**アーム名が `export_base.py` の候補表とずれていないかも機械照合する**(手で打ち直した名前がずれるのを防ぐ) |
+| [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) | **判定ロジックは触らない。** `x00` 枝の関門(正解率 ≥ 0.30・解釈不能率 ≤ 5%)は pc-02 で実装済みで、そのまま使う | ✅ **1文字も変えていない。** アーム名 `pcbase-<name>-x00` は末尾2桁が `00` なので `rate = 0.0` と解釈され、注入群なしの陰性対照の枝に入る(実測で確認) |
+| [scripts/30-record-environment.sh](scripts/30-record-environment.sh) | **`data/jmmlu.jsonl` の sha256 を環境記録に出す**(上の新設欄の実装) | ✅ 生 sha256・行数・**CRLF の箇所数**を JSON と Markdown の両方に出す。pc-01 / pc-02 が測った版の先頭8桁を [lib.sh](scripts/lib.sh) に `JMMLU_MEASURED_SHA256_PREFIX` として置き、**違えば警告する**(既定は警告。`CONTAMLAB_EXPECT_BENCHMARK_SHA256` を渡したときだけ機械的に停止する) |
+
+**テスト 408 件は変更後も全て通過。** `contamlab/` 配下は1行も触っていない。
 
 **総見込み: 候補1本あたり ダウンロード + 変換 約30分 + 400 コール 約10分。
 2本でも約1.5時間、準備込みで約2時間 ≒ $4(約 ¥600)。**
@@ -2425,6 +2427,20 @@ pc-01・pc-02 の解釈不能率が変換経路に依存していたという意
 ---
 
 ## 変更履歴
+
+- **2026-08-09(positive-control-03 の実装。★ 規則は1つも変えていない)**: 上の「実装」表の
+  4項目を書いた。**候補表は `CANDIDATES` としてコード上の定数になり、HF id / revision を
+  コマンドラインから渡す口は作っていない。** [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) は
+  **1文字も変えていない**(アーム名 `pcbase-<name>-x00` は末尾2桁が `00` なので
+  そのまま陰性対照の枝に入ることを実測で確認した)。
+  順序ガード `check_order()` は**「前の候補を作ったか」までしか確かめられない** ——
+  関門の判定は操作チェック側にあり、落ちたときは何も書き残さないため。
+  **うっかりを止める柵であって担保ではない**とコードにも明記した。
+  注入集合の複製は `n_injected != 0` なら拒否する(pc-03 は注入しないラン)。
+  ★ 併せて [scripts/lib.sh](scripts/lib.sh) に `JMMLU_MEASURED_SHA256_PREFIX` を置き、
+  環境記録に**生 sha256・行数・CRLF の箇所数**を出すようにした。
+  **テスト 408 件は全て通過。`contamlab/` 配下は1行も触っていない。**
+  **モデルは1本も作っておらず、GPU も借りていない(課金ゼロ)。**
 
 - **2026-08-09(positive-control-03 を事前登録)**: **候補を1本も測る前に**、上の
   「## ラン: positive-control-03」を書いた。**本ランはベースの選定だけを行い、
