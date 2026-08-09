@@ -84,10 +84,18 @@ for arm in arms:
     print(f"      非注入群 n={n_o:4d}  正解率 {acc_o:.4f}  解釈不能 {unp_o:.2%}")
 
     if not injected:
-        # pc-x00 には注入群が無い。ここで見るのは「fine-tune がベースを壊していないか」。
+        # pc-x00 / pcbase-x00 には注入群が無い。ここで見るのは
+        # 「fine-tune がベースを壊していないか」(pc-01)、
+        # 「そもそもこのベースが書式 C で使えるのか」(pc-02 の第0段)。
         print(f"      注入群   —— 無し(陰性対照)")
         if acc_o < 0.30:
             failures.append(f"{arm}: 素の正解率 {acc_o:.4f} < 0.30。fine-tune がベースを壊した。")
+        # ★ pc-02 の第0段。閾値 5% は pc-01「解釈不能率が 5% 超のアームは外す」の移植で、
+        #   preregister pc-02「合格条件 c」として測る前に凍結されている。
+        if unp_o > 0.05:
+            failures.append(
+                f"{arm}: 解釈不能率 {unp_o:.2%} > 5%。**レシピの問題ではない。**"
+                " このベースと書式の組み合わせでは、注入の有無に関わらず全アームが脱落する。")
         continue
 
     acc_i, unp_i, n_i = accuracy(model, injected)
@@ -96,11 +104,28 @@ for arm in arms:
     print(f"      差       {diff:+.4f}  ({diff*100:+.2f} pt)")
 
     # ★ preregister の停止条件をそのまま実装する。閾値は測る前に決まっている。
+    # 合格条件 a(差 ≥ 10pt)—— pc-01 から変えていない。
     if diff < 0:
         failures.append(f"{arm}: 注入群のほうが低い({diff:+.4f})。レシピがモデルを壊している。")
     elif rate >= 0.20 and diff < 0.10:
         failures.append(
             f"{arm}: 注入率 {rate:.0%} なのに差が {diff*100:.2f}pt < 10pt。**注入が入っていない。**")
+
+    # ★ 合格条件 b・c —— preregister pc-02「合格条件(各段で同一・測る前に固定)」の実装。
+    #   閾値そのものは新しくない(b は pc-01「pc-x00 が 0.30 未満なら停止」、
+    #   c は pc-01「解釈不能率が 5% 超のアームは外す」)。**機械判定が無かっただけである。**
+    #
+    #   ★ a だけで選ぶと「注入は入るがモデルが壊れているレシピ」が勝ちうる。
+    #     そのレシピで較正を回すと全アームが c で脱落し、アームが 1 本以下になって
+    #     Cochran の Q が計算できない。b・c は本番での実行可能性そのものである。
+    if acc_o < 0.30:
+        failures.append(
+            f"{arm}: 非注入群の正解率 {acc_o:.4f} < 0.30(合格条件 b)。"
+            " 注入が入っていてもこのレシピは本番で使えない。")
+    if unp_o > 0.05 or unp_i > 0.05:
+        failures.append(
+            f"{arm}: 解釈不能率 非注入 {unp_o:.2%} / 注入 {unp_i:.2%} のどちらかが 5% 超"
+            "(合格条件 c)。pc-01 ならこのアームは脱落、pc-02 ならこの段は不合格。")
 
 print()
 if failures:
@@ -108,11 +133,18 @@ if failures:
     for f in failures:
         print(f"    {f}", file=sys.stderr)
     print("""
-  preregister の指示: レシピ(E・学習率・LoRA rank)を見直して**別のランとして**やり直す。
-  ★ 同じランの中で E を変えて撃ち直してはいけない。それは結果を見てから規則を選ぶことである。
-  やり直す場合、ラン名は positive-control-02 になり、事前登録もやり直す。
-
   ★ この結果を「装置が鈍い」と読んではいけない。読めるのは「注入が入らなかった」だけである。
+
+  ラン positive-control-01 のアーム(pc-*)の場合:
+    レシピ(E・学習率・LoRA rank)を見直して**別のランとして**やり直す。
+    ★ 同じランの中で E を変えて撃ち直してはいけない。結果を見てから規則を選ぶことになる。
+    → それが positive-control-02 であり、事前登録済みである。
+
+  ラン positive-control-02 のアーム(pcbase-x00 / pcr*-x40)の場合:
+    pcbase-x00(第0段)が落ちた → ★停止。レシピの問題ではない。E を触っても解決しない。
+                                 ベースの選び直しを positive-control-03 として別に事前登録する。
+    pcr*-x40(梯子)が落ちた   → その段は不合格。**事前登録した順序どおり次の段へ進む。**
+                                 R4 まで落ちたら「全滅」を結果として報告し、格子は増やさない。
 """, file=sys.stderr)
     raise SystemExit(1)
 

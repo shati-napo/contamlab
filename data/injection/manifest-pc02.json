@@ -1,0 +1,65 @@
+{
+  "run": "positive-control-02",
+  "note": "pc-01 の注入集合をアーム名だけ変えて複製したもの。中身は生成していない。",
+  "source_run": "positive-control-01",
+  "inject_salt": "contamlab-inject-v1",
+  "split": "dev",
+  "dev_size": 4742,
+  "template_sha256": "fb7a254c4b1addfeace26287e586aa7f44a44a3a99b337b22383cb3485f28b2e",
+  "arms": [
+    {
+      "name": "pcr0-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "pcr1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "pcr2-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "pcr3-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "pcr4-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "pcbase-x00",
+      "copied_from": "pc-x00",
+      "injection_rate": 0.0,
+      "n_injected": 0,
+      "chars": 0,
+      "txt_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "ids_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

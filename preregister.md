@@ -2110,14 +2110,15 @@ pc-01 の主張範囲1〜5をすべて引き継いだうえで、**3つ足す。
 | 各段の GGUF SHA256 | ⬜ `reports/gguf-sha256.txt` へ記録 → ここへ転記 |
 | 各段の実測ステップ数 / loss | ⬜ `models/<段>/train.json` から転記 |
 
-#### 実装(★ **規則ではなく規則の実装**である。これから書く)
+#### 実装(★ **規則ではなく規則の実装**である。2026-08-09 に完了)
 
-| 対象 | 変更 |
-|---|---|
-| [finetune/train_lora.py](finetune/train_lora.py) | **凍結したレシピ表 R0〜R4 を定数として持ち、`--recipe` で選ぶ。** `EXPOSURES_E` / `LEARNING_RATE` / `LORA_RANK` / `LORA_ALPHA` / `TOTAL_TOKENS_T` は表から引く。**表の値をコマンドラインから上書きできるようにはしない**(それは事前登録の外に出る口になる) |
-| `data/injection/` | `pcr0-x40` 〜 `pcr4-x40` / `pcbase-x00` の `.jsonl` / `.ids` を **pc-x40 のものから複製**し、sha256 の一致を確認する(器が `arm` 名からファイルを引くため) |
-| [finetune/to_gguf.sh](finetune/to_gguf.sh) | `python` を venv のものに固定(pc-01 で詰まった点)。**変換前に Ollama が起動していることを確認して止まる** |
-| [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) | **判定ロジックは触らない。** 合格条件 b・c は現状 `x00` 以外で機械判定していないので、**b・c の判定を足す**(閾値は本節で凍結済み) |
+| 対象 | 変更 | 状態 |
+|---|---|---|
+| [finetune/train_lora.py](finetune/train_lora.py) | **凍結したレシピ表 R0〜R4 を定数として持ち、`--recipe` で選ぶ。** `EXPOSURES_E` / `LEARNING_RATE` / `LORA_RANK` / `LORA_ALPHA` / `TOTAL_TOKENS_T` は表から引く。**表の値をコマンドラインから上書きできるようにはしない**(それは事前登録の外に出る口になる) | ✅ `RECIPES` / `RECIPE_ARMS`。段とアームの対応も凍結し、不一致は起動時に弾く。`T = 235,917 × E` を従属的に計算し、注入トークン数が凍結値と違えば走らない |
+| `data/injection/` | `pcr0-x40` 〜 `pcr4-x40` / `pcbase-x00` の `.jsonl` / `.ids` を **pc-x40 のものから複製**し、sha256 の一致を確認する(器が `arm` 名からファイルを引くため) | ✅ [finetune/prepare_pc02_arms.py](finetune/prepare_pc02_arms.py)。複製の**前後**で pc-01 の `manifest.json` と sha256 照合し、`manifest-pc02.json` に記録。実行済み・6アーム一致 |
+| [finetune/to_gguf.sh](finetune/to_gguf.sh) | `python` を venv のものに固定(pc-01 で詰まった点)。**変換前に Ollama が起動していることを確認して止まる** | ✅ `finetune/.venv/bin/python` を既定にし、`transformers`/`torch` の import と Ollama の応答を**変換に入る前に**確かめる |
+| [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) | **判定ロジックは触らない。** 合格条件 b・c は現状 `x00` 以外で機械判定していないので、**b・c の判定を足す**(閾値は本節で凍結済み) | ✅ 既存の a の判定は無改変。b(`acc_o < 0.30`)と c(両群 `> 5%`)を追加。`x00` 枝にも c を足した(=第0段の関門) |
+| [finetune/export_base.py](finetune/export_base.py) | ★ **上の表に無かったが第0段に必要**。未 fine-tune のベースを `pcbase-x00` として、fine-tune 済みと**同じ経路**(bf16 → safetensors → `b10327` → Q4_K_M)で書き出す | ✅ 新規。ここで dtype や保存形式を変えると、第0段と各段の差にレシピ以外の原因が混ざる |
 
 **総見込み: 学習 約108分 + 変換 6本 × 約4分 + 選抜 6本 × 800 コール + 確認 4,742 コール
 + 準備 約20分 ≒ 3時間 ≒ $6(約 ¥900)。**
@@ -2132,6 +2133,14 @@ pc-01 の主張範囲1〜5をすべて引き継いだうえで、**3つ足す。
 
 ## 変更履歴
 
+- **2026-08-09(positive-control-02 の実装。★ 規則は1つも変えていない)**: 上の「実装」表の
+  4項目を書き、**表に無かった [finetune/export_base.py](finetune/export_base.py) を足した**
+  (第0段には未 fine-tune のベースを同じ変換経路に載せる必要があるのに、経路が無かった)。
+  凍結値は `RECIPES` / `INJECTED_TOKENS_ONCE` としてコード上の定数になり、
+  **コマンドラインから上書きする口は作っていない。** 注入集合は pc-01 の `pc-x40` から
+  6アーム分を複製し、**複製の前後で sha256 を照合**して `manifest-pc02.json` に記録した
+  (6アームとも pc-01 の記録と完全一致)。`contamlab verify` は 3 項目とも通過。
+  **モデルは1本も作っておらず、GPU も借りていない(課金ゼロ)。**
 - **2026-08-09(positive-control-02 を事前登録)**: **モデルを1本も作る前に**、上の
   「## ラン: positive-control-02」を書いた。**本ランは測定ではなくレシピ探索であり、
   較正曲線も検出下限も出さない**(`70-positive-control.sh` を走らせない/

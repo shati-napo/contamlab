@@ -155,11 +155,37 @@ pc-01 は「素の正解率 0.425 / 解釈不能率 0.5%」を根拠にベース
 
 ### 着手手順
 
-1. ⬜ **実装**(規則ではなく規則の実装): `train_lora.py` にレシピ表 R0〜R4 と `--recipe` /
-   注入集合の複製と sha256 照合 / `to_gguf.sh` の `python` 固定 /
-   `65-manipulation-check.sh` に合格条件 b・c の判定を足す
+1. ~~**実装**(規則ではなく規則の実装)~~ → **2026-08-09 完了。規則は1つも変えていない。**
+   - [finetune/train_lora.py](finetune/train_lora.py) — レシピ表 `RECIPES`(R0〜R4)と `--recipe`。
+     **上書きする口は作っていない。** 段とアームの対応も凍結し、不一致は起動時に弾く。
+     `T = 235,917 × E` は従属計算で、注入トークン数が凍結値と違えば走らない
+   - [finetune/prepare_pc02_arms.py](finetune/prepare_pc02_arms.py)(新規)— 注入集合の複製。
+     **複製の前後で** pc-01 の `manifest.json` と sha256 照合。**実行済み・6アーム完全一致**
+   - [finetune/export_base.py](finetune/export_base.py)(新規)— 第0段のベースを
+     fine-tune 済みと**同じ経路**で書き出す(表に無かったが第0段に必要だった)
+   - [finetune/to_gguf.sh](finetune/to_gguf.sh) — `python` を venv に固定。
+     `transformers`/`torch` と Ollama を**変換に入る前に**確認して止まる
+   - [scripts/65-manipulation-check.sh](scripts/65-manipulation-check.sh) — 既存の a は無改変。
+     **b・c を追加**し、`x00` 枝にも c を足した(= 第0段の関門)
+   - `contamlab verify` 3項目とも通過。**モデルは1本も作っていない(課金ゼロ)**
+
 2. ⬜ GPU を借りる → 実行環境の空欄を埋める → **第0段**
+
+   ```bash
+   python finetune/prepare_pc02_arms.py        # 注入集合(ローカルで実行済み・GPU 側でも通す)
+   python finetune/export_base.py              # models/pcbase-x00
+   bash   finetune/to_gguf.sh pcbase-x00
+   bash   scripts/65-manipulation-check.sh pcbase-x00     # ★ 約15分。ここが分岐点
+   ```
+
 3. ⬜ 第0段が通れば梯子。通らなければ**停止**(ベースの選び直しは pc-03 として別に登録)
+
+   ```bash
+   python finetune/train_lora.py --recipe R0   # 段は R0 → R1 → R2 → R3 → R4 の順。合格で止める
+   bash   finetune/to_gguf.sh pcr0-x40
+   bash   scripts/65-manipulation-check.sh pcr0-x40                    # 選抜(1群 400 問)
+   CONTAMLAB_PER_GROUP=0 bash scripts/65-manipulation-check.sh pcr0-x40  # 確認(全件・拘束力あり)
+   ```
 
 ## 何をするか
 
@@ -198,7 +224,9 @@ pc-01 は「素の正解率 0.425 / 解釈不能率 0.5%」を根拠にベース
 6. ❌ 測定(56,904 コール)→ **1問も撃っていない**
 7. ~~**`positive-control-02` の事前登録を書く**(E・学習率・LoRA rank の見直し)~~
    → **2026-08-09 完了。GPU を借りる前に書き切った。** 上の「▶ ラン positive-control-02」が正
-8. ⬜ **pc-02 の実装 → GPU → 第0段 → 梯子。** ★ ここが次の着手点
+8. ~~**pc-02 の実装**(レシピ表・注入集合の複製・変換の事前確認・合格条件 b・c)~~
+   → **2026-08-09 完了。規則は1つも変えていない。課金ゼロ。** 上の「着手手順 1」が正
+9. ⬜ **GPU を借りる → 第0段(約15分)→ 通れば梯子 R0〜R4。** ★ ここが次の着手点
 
 **「結果を見てから規則を選ぶ」ことになるので、測定値・判定・n は後から変えない。**
 これは全コミットで守ってきた規律。
