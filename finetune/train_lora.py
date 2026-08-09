@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """finetune/train_lora.py — 1アーム分の汚染モデルを LoRA で作る。
 
-    python finetune/train_lora.py --arm pc-x40        ← ラン positive-control-01
-    python finetune/train_lora.py --recipe R2         ← ラン positive-control-02(段 R2)
+    python finetune/train_lora.py --arm pc-x40                              ← pc-01
+    python finetune/train_lora.py --recipe R2 --run positive-control-02     ← pc-02(未実行)
+    python finetune/train_lora.py --recipe R0                               ← pc-04(既定)
 
 preregister「ラン: positive-control-01」の
 「注入の定義」「学習量をアーム間で揃える」が正。**このスクリプトは規則を決めない。**
+
+★ ラン pc-04 は **pc-02 が凍結して一度も実行しなかった梯子 R0〜R4 を、pc-03 が凍結した
+  ベース(Llama-3.1-Swallow-8B)で回す**ものである。梯子の E・学習率・rank・α は
+  1文字も変えていない。変えたのは **ベース**と、**実効バッチ 16 の内訳**だけで、
+  どちらも preregister に測る前から書いてある。
 
 ★ アーム間で固定されているもの(1つでも動かすと、測っているのが注入率でなくなる):
   総学習トークン T / 露出回数 E / LoRA の設定 / 学習率 / スケジューラ / 乱数シード
@@ -28,6 +34,22 @@ from pathlib import Path
 BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
 BASE_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 
+# ---------------------------------------------------------------------------
+# ★ ラン → ベース。**ランごとに凍結されており、コマンドラインから渡す口は無い。**
+#
+#   pc-01 / pc-02: Qwen2.5-1.5B-Instruct
+#     → pc-02 の第0段で落ちた(正解率 0.3600 / 解釈不能率 14.50% > 5%)。
+#       書式 C の雛形にある `X` を字義どおり出力してしまう。
+#   pc-04: Llama-3.1-Swallow-8B-Instruct-v0.5
+#     → **ラン positive-control-03 が 2026-08-09 に凍結した**(0.6100 / 0.75%)。
+#       preregister「## ラン: positive-control-03」→「★ 結果」が正。
+# ---------------------------------------------------------------------------
+RUN_BASES: dict[str, tuple[str, str]] = {
+    "positive-control-02": (BASE_MODEL, BASE_REVISION),
+    "positive-control-04": ("tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5",
+                            "b1f8317099a97e790ec872c1225ca155979b4816"),
+}
+
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
 TOTAL_TOKENS_T = 2_831_004       # = 40% アームの注入トークン 235,917 × E
 BLOCK_SIZE = 2048
@@ -44,6 +66,29 @@ WARMUP_RATIO = 0.03
 PER_DEVICE_BATCH = 8
 GRAD_ACCUM = 2
 SEED = 20260809
+
+# ---------------------------------------------------------------------------
+# ★ 実効バッチの「内訳」。preregister「## ラン: positive-control-04」→
+#   「★ 変える1点 —— 実効バッチ 16 の内訳」が正であり、**測る前に凍結された。**
+#
+#   実効バッチ 16 そのものは pc-01 から一度も変えていない。変えるのは分け方だけである。
+#   8B では `batch 8 × grad_accum 2` が A100 40GB に載らない見込みが高い
+#   (支配項は活性値ではなく**語彙×系列長×バッチのロジット**。1.5B ですらピーク
+#    39,283/40,960 MiB で、gradient checkpointing は既に有効)。
+#
+#   ★ 規則: micro-batch を **8 → 4 → 2 → 1 の順**に試し、OOM しなかった最初の値を使う。
+#     grad_accum は `16 / micro-batch` で従属的に決まる。**探索ではない** ——
+#     順序も候補も上限も先に決まっており、選ぶ基準は「載るか」だけで
+#     **結果を1つも見ずに決まる。** 速いほうを選ぶのではない(機種ごとに値が変わり
+#     再現性が落ちるため)。
+#
+#   ★ なぜ学習の中身が変わらないと言えるか: 固定長 BLOCK_SIZE のブロックにパックして
+#     いるので**どの micro-batch も損失トークン数が等しく**、勾配累積の平均は分割の
+#     仕方に依らない。端数の最終ブロックだけは例外で、その分の差は残る。
+# ---------------------------------------------------------------------------
+EFFECTIVE_BATCH = 16
+MICRO_BATCH_LADDER = (8, 4, 2, 1)
+MICRO_BATCH_FILE = Path("reports/micro-batch")   # probe_micro_batch.py が書く
 
 ARMS = ["pc-x00", "pc-x02", "pc-x05", "pc-x10", "pc-x20", "pc-x40"]
 
@@ -74,8 +119,21 @@ RECIPES: dict[str, dict] = {
 # 段 → アーム名。器(65-manipulation-check.sh / runner)は**アーム名から**
 # 注入集合とキャッシュのキーを引くので、段ごとに別名でなければならない。
 # 末尾 2 桁が注入率として読まれる(`arm[-2:]`)ため `-x40` を保つ。
-RECIPE_ARMS = {stage: f"pc{stage.lower()}-x40" for stage in RECIPES}
+#
+# ★ ラン pc-04 は pc-02 と**同じ梯子を別のベースで**回す。キャッシュのキーは
+#   モデル名なので、**同じアーム名を使い回すと pc-02 の応答と混ざる。**
+#   よってランごとに接頭辞を変える(`pcr0-x40` / `pc4r0-x40`)。
+ARM_PREFIXES = {"positive-control-02": "pc", "positive-control-04": "pc4"}
+
+
+def recipe_arms(run: str) -> dict[str, str]:
+    return {stage: f"{ARM_PREFIXES[run]}{stage.lower()}-x40" for stage in RECIPES}
+
+
+RECIPE_ARMS = recipe_arms("positive-control-02")
 PC02_ARMS = list(RECIPE_ARMS.values())
+PC04_ARMS = list(recipe_arms("positive-control-04").values())
+LADDER_ARMS = PC02_ARMS + PC04_ARMS
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -100,10 +158,15 @@ def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--arm", choices=ARMS + PC02_ARMS,
+    ap.add_argument("--arm", choices=ARMS + LADDER_ARMS,
                     help="pc-01 のアーム名。--recipe を使う場合は省略可(段から決まる)")
     ap.add_argument("--recipe", choices=sorted(RECIPES),
-                    help="★ ラン positive-control-02 の段。凍結表から E / 学習率 / rank / α / T を引く")
+                    help="★ 梯子の段。凍結表から E / 学習率 / rank / α / T を引く")
+    ap.add_argument("--run", choices=sorted(RUN_BASES), default="positive-control-04",
+                    help="★ どのランの梯子か。ベースとアーム接頭辞がここで決まる")
+    ap.add_argument("--micro-batch", type=int, choices=MICRO_BATCH_LADDER,
+                    help="★ 実効バッチ 16 の内訳。probe_micro_batch.py が決めた値を渡す"
+                         "(既定は reports/micro-batch を読む)")
     ap.add_argument("--injection-dir", type=Path, default=Path("data/injection"))
     ap.add_argument("--filler", type=Path, default=Path("data/filler/filler.jsonl"))
     ap.add_argument("--out-dir", type=Path, default=Path("models"))
@@ -114,10 +177,10 @@ def main() -> int:
     #   preregister「凍結して動かさないもの」に列挙されている。
     if args.recipe:
         recipe = RECIPES[args.recipe]
-        expected_arm = RECIPE_ARMS[args.recipe]
+        expected_arm = recipe_arms(args.run)[args.recipe]
         if args.arm and args.arm != expected_arm:
-            print(f"★ 段 {args.recipe} のアームは {expected_arm} である(指定: {args.arm})。"
-                  "段とアームの対応は凍結されている。")
+            print(f"★ ラン {args.run} の段 {args.recipe} のアームは {expected_arm} である"
+                  f"(指定: {args.arm})。段とアームの対応は凍結されている。")
             return 1
         arm = expected_arm
         exposures_e = recipe["E"]
@@ -126,13 +189,13 @@ def main() -> int:
         lora_alpha = recipe["alpha"]
         # T は独立変数ではない。凍結された注入トークン数 × E で従属的に決まる。
         total_tokens_t = INJECTED_TOKENS_ONCE * exposures_e
-        run_name = "positive-control-02"
+        run_name = args.run
     else:
         if not args.arm:
             print("★ --arm か --recipe のどちらかが要る。")
             return 1
-        if args.arm in PC02_ARMS:
-            print(f"★ {args.arm} は positive-control-02 のアームである。--recipe で段を指定すること。")
+        if args.arm in LADDER_ARMS:
+            print(f"★ {args.arm} は梯子のアームである。--recipe と --run で指定すること。")
             return 1
         arm = args.arm
         exposures_e = EXPOSURES_E
@@ -142,11 +205,37 @@ def main() -> int:
         total_tokens_t = TOTAL_TOKENS_T
         run_name = "positive-control-01"
 
+    base_model, base_revision = RUN_BASES.get(run_name, (BASE_MODEL, BASE_REVISION))
+
+    # --- 0b. 実効バッチ 16 の内訳(preregister pc-04「★ 変える1点」) --------------
+    #   ★ 自由な値は受け付けない。梯子(8/4/2/1)の中からしか選べず、
+    #     grad_accum は割り算で従属的に決まる。
+    if run_name == "positive-control-04":
+        micro_batch = args.micro_batch
+        if micro_batch is None:
+            if not MICRO_BATCH_FILE.is_file():
+                print(f"★ micro-batch が決まっていない。{MICRO_BATCH_FILE} が無い。")
+                print("  先に `python finetune/probe_micro_batch.py` を走らせること"
+                      "(8 → 4 → 2 → 1 の順に載るかを試す。人が決めない)。")
+                return 1
+            micro_batch = int(MICRO_BATCH_FILE.read_text(encoding="utf-8").strip())
+            if micro_batch not in MICRO_BATCH_LADDER:
+                print(f"★ {MICRO_BATCH_FILE} の値 {micro_batch} が梯子 {MICRO_BATCH_LADDER} に無い。")
+                return 1
+    else:
+        micro_batch = args.micro_batch or PER_DEVICE_BATCH
+    grad_accum, rem = divmod(EFFECTIVE_BATCH, micro_batch)
+    if rem:
+        print(f"★ micro-batch {micro_batch} は実効バッチ {EFFECTIVE_BATCH} を割り切らない。")
+        return 1
+
     print(f"ラン {run_name}"
           + (f" / 段 {args.recipe}" if args.recipe else "")
           + f" / アーム {arm}\n"
+          f"  ベース={base_model} @ {base_revision[:8]}\n"
           f"  E={exposures_e}  学習率={learning_rate:g}  rank={lora_rank}  α={lora_alpha}  "
-          f"T={total_tokens_t:,d}")
+          f"T={total_tokens_t:,d}\n"
+          f"  実効バッチ={EFFECTIVE_BATCH}(micro {micro_batch} × grad_accum {grad_accum})")
 
     import torch
     from peft import LoraConfig, get_peft_model
@@ -154,7 +243,7 @@ def main() -> int:
                               Trainer, TrainingArguments, set_seed)
 
     set_seed(SEED)
-    tok = AutoTokenizer.from_pretrained(BASE_MODEL, revision=BASE_REVISION)
+    tok = AutoTokenizer.from_pretrained(base_model, revision=base_revision)
     eos = tok.eos_token_id
 
     # --- 1. 注入レコードを E 回 ------------------------------------------------
@@ -215,7 +304,7 @@ def main() -> int:
                     "labels": torch.tensor(ids + [-100] * pad)}
 
     model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL, revision=BASE_REVISION, torch_dtype=torch.bfloat16, device_map="cuda")
+        base_model, revision=base_revision, torch_dtype=torch.bfloat16, device_map="cuda")
     model = get_peft_model(model, LoraConfig(
         r=lora_rank, lora_alpha=lora_alpha, lora_dropout=LORA_DROPOUT,
         target_modules=LORA_TARGETS, task_type="CAUSAL_LM"))
@@ -233,8 +322,8 @@ def main() -> int:
         args=TrainingArguments(
             output_dir=str(out / "_ckpt"),
             num_train_epochs=1,             # ★ E はコーパス側で実現済み。epoch は 1
-            per_device_train_batch_size=PER_DEVICE_BATCH,
-            gradient_accumulation_steps=GRAD_ACCUM,
+            per_device_train_batch_size=micro_batch,
+            gradient_accumulation_steps=grad_accum,
             learning_rate=learning_rate,
             lr_scheduler_type=LR_SCHEDULER,
             warmup_ratio=WARMUP_RATIO,
@@ -252,7 +341,7 @@ def main() -> int:
 
     (out / "train.json").write_text(json.dumps({
         "run": run_name, "recipe": args.recipe,
-        "arm": arm, "base_model": BASE_MODEL, "base_revision": BASE_REVISION,
+        "arm": arm, "base_model": base_model, "base_revision": base_revision,
         "exposures_E": exposures_e, "target_total_tokens_T": total_tokens_t,
         "injected_tokens_once": inj_tokens_once, "injected_tokens_total": injected_total,
         "filler_tokens": filler_total, "content_tokens": content_tokens,
@@ -262,7 +351,10 @@ def main() -> int:
         "lora": {"r": lora_rank, "alpha": lora_alpha, "dropout": LORA_DROPOUT,
                  "targets": LORA_TARGETS},
         "lr": learning_rate, "scheduler": LR_SCHEDULER, "warmup_ratio": WARMUP_RATIO,
-        "batch": PER_DEVICE_BATCH, "grad_accum": GRAD_ACCUM, "seed": SEED,
+        "batch": micro_batch, "grad_accum": grad_accum,
+        "effective_batch": EFFECTIVE_BATCH, "seed": SEED,
+        # ★ preregister pc-04 の実行環境「実測 VRAM ピーク」に転記する値。
+        "peak_vram_mib": round(torch.cuda.max_memory_reserved() / 1024**2) if torch.cuda.is_available() else None,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"保存: {out}")
     return 0

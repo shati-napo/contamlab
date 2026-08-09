@@ -335,17 +335,39 @@ pc-01 の実測(1.5B・91 ステップ・約7分)から、8B は **1 ステッ�
 
 ### 着手手順
 
-1. ⬜ **実装**(規則ではなく規則の実装・課金ゼロ)
-   - `train_lora.py` — ベースを pc-03 の凍結値に切替。**`RECIPES` は1文字も変えない。**
-     `PER_DEVICE_BATCH` / `GRAD_ACCUM` を実効バッチ 16 を保つ組で持ち、上の規則で選ぶ。
-     アーム名は pc-02 と衝突するので `pc4r*-x40`
-   - 注入集合 — `pc4r0-x40` 〜 `pc4r4-x40` を `pc-x40` から複製(前後で sha256 照合・
-     `n_injected = 1,896` を期待値に)
-   - `65-manipulation-check.sh` — ★ **合格時の定型文の不備だけ**直す(文言のみ。閾値も分岐も変えない)
-   - micro-batch の選択を**スクリプトに落とす**(人が「まあ 2 でいいか」と決めないため)
-2. ⬜ GPU を借りる → 実行環境を埋める → **第0段**
+1. ~~**実装**(規則ではなく規則の実装)~~
+   → **2026-08-09 完了。規則は1つも変えていない。課金ゼロ。テスト 408 件通過。**
+   - [train_lora.py](../finetune/train_lora.py) — `RUN_BASES`(ラン → ベース)と
+     `ARM_PREFIXES`(ラン → アーム接頭辞)の2表に閉じ込め、`--run` で選ぶ。
+     **`RECIPES` は1文字も変えていない。** `--micro-batch` は梯子 `(8,4,2,1)` からしか
+     受け付けず、**`grad_accum` は `16 / micro-batch` で従属的に決まる。**
+     既定は `reports/micro-batch` を読み、**無ければ起動を拒否**(人が決める経路を残さない)。
+     実測 VRAM ピークを `train.json` に記録
+   - [probe_micro_batch.py](../finetune/probe_micro_batch.py)(新規)— **梯子で最も重い段
+     (R4・rank 64)**で試すので載れば全段で載る。本番と同じ条件で前進+後退を回し、
+     **OOM だけを見る。正解率も損失も読まない**
+   - [prepare_pc04_arms.py](../finetune/prepare_pc04_arms.py)(新規)— 複製の前後で sha256 照合。
+     **pc-03 とは逆に `n_injected = 1,896` を確かめる**(取り違えると測るものが変わる)
+   - [65-manipulation-check.sh](../scripts/65-manipulation-check.sh) — ★ **表示だけ**直した。
+     **閾値・分岐・失敗の判定は1文字も変えていない**
+2. ⬜ **GPU を借りる → 実行環境を埋める → probe → 第0段。★ ここが次の着手点**
 3. ⬜ 梯子 R0 → R4。合格した段で止める。全滅なら「全滅」を結果として報告
 4. ⬜ 通った段だけ**全件**で確認 → レシピを凍結 → `positive-control-05`(較正)を事前登録
+
+**箱の上での手順**:
+```bash
+bash   scripts/10-bootstrap.sh && bash scripts/20-rebuild-benchmark.sh
+python tools/build_injection_sets.py
+python finetune/prepare_pc03_arms.py && python finetune/prepare_pc04_arms.py
+bash   scripts/30-record-environment.sh && printf 'C\n' > reports/prompt-format
+finetune/.venv/bin/python finetune/probe_micro_batch.py      # ★ 内訳を機械が決める
+finetune/.venv/bin/python finetune/export_base.py --candidate 1   # 第0段
+bash   finetune/to_gguf.sh pcbase-swallow31-8b-x00
+bash   scripts/65-manipulation-check.sh pcbase-swallow31-8b-x00
+finetune/.venv/bin/python finetune/train_lora.py --recipe R0      # 梯子(既定が pc-04)
+bash   finetune/to_gguf.sh pc4r0-x40
+bash   scripts/65-manipulation-check.sh pc4r0-x40
+```
 
 ---
 
@@ -479,9 +501,11 @@ bash   scripts/65-manipulation-check.sh pcbase-swallow31-8b-x00
     梯子は pc-02 の値を1文字も変えず引き継ぎ、**規則を触ったのは2点だけ**
     (実効バッチ 16 の内訳を決定論的規則で決め直す / 前提が消えた R0 の停止条件を退役)。
     **費用は $35**(R4 まで全滅で約 $27。pc-02 の $25 では足りなかった)
-14. ⬜ **pc-04 の実装**(ベース切替 / アーム名 `pc4r*-x40` / micro-batch 選択の自動化 /
-    定型文の不備の修正)。★ **ここが次の着手点。課金ゼロで終わる**
-15. ⬜ GPU を借りる → 第0段 → 梯子 R0〜R4 → 通った段を全件で確認
+14. ~~**pc-04 の実装**(ベース切替 / アーム名 `pc4r*-x40` / micro-batch 選択の自動化 /
+    定型文の不備の修正)~~
+    → **2026-08-09 完了。規則は1つも変えていない。テスト 408 件通過。課金ゼロ**
+15. ⬜ **GPU を借りる → probe → 第0段 → 梯子 R0〜R4 → 通った段を全件で確認。**
+    ★ **ここが次の着手点。$35 まで(R0 で合格なら約 $9)**
 16. ⬜ `positive-control-05`(較正の測定)の事前登録。**レシピが決まってから**
 
 **「結果を見てから規則を選ぶ」ことになるので、測定値・判定・n は後から変えない。**

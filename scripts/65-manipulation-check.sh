@@ -62,6 +62,7 @@ def accuracy(model, items):
     return (ok / n if n else 0.0), (1 - parsed / n if n else 0.0), n
 
 failures = []
+saw_injection = False   # ★ 表示の分岐にだけ使う。判定には一切入らない
 print()
 for arm in arms:
     ids_path = Path("data/injection") / f"{arm}.ids"
@@ -98,6 +99,7 @@ for arm in arms:
                 " このベースと書式の組み合わせでは、注入の有無に関わらず全アームが脱落する。")
         continue
 
+    saw_injection = True
     acc_i, unp_i, n_i = accuracy(model, injected)
     diff = acc_i - acc_o
     print(f"      注入群   n={n_i:4d}  正解率 {acc_i:.4f}  解釈不能 {unp_i:.2%}")
@@ -145,8 +147,24 @@ if failures:
                                  ベースの選び直しを positive-control-03 として別に事前登録する。
     pcr*-x40(梯子)が落ちた   → その段は不合格。**事前登録した順序どおり次の段へ進む。**
                                  R4 まで落ちたら「全滅」を結果として報告し、格子は増やさない。
+
+  ラン positive-control-03 のアーム(pcbase-<名前>-x00)の場合:
+    候補が関門を落ちた → 事前登録した順序どおり次の候補へ。2本とも落ちたら「全滅」を
+                         結果として報告する。**書式も採点規則も 5% の閾値も緩めない。**
+
+  ラン positive-control-04 のアーム(pc4r*-x40)の場合:
+    pcbase-*-x00(第0段)が落ちた → ★停止。レシピの問題ではない。
+    pc4r*-x40(梯子)が落ちた     → その段は不合格。次の段へ。R4 まで落ちたら「全滅」。
 """, file=sys.stderr)
     raise SystemExit(1)
 
-print("操作チェック通過。注入は入っている。測定へ進んでよい。")
+# ★ 文言だけの分岐(2026-08-09・ラン pc-03 の実行時に見つけた不備の修正)。
+#   注入率 0% のアームだけを測ったとき、「注入は入っている」は事実に反する
+#   —— そのアームには注入群が無く、差も測っていない。**判定は上で確定済みで、
+#   ここは表示だけである。閾値も分岐も変えていない。**
+if saw_injection:
+    print("操作チェック通過。注入は入っている。測定へ進んでよい。")
+else:
+    print("関門を通過。**注入は測っていない**(注入率 0% のアームのみ)。"
+          "確かめたのは「このベースが書式 C でこの器を通せる」ことだけである。")
 PYEOF
