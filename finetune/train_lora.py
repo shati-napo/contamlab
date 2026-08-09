@@ -107,6 +107,24 @@ ARMS = ["pc-x00", "pc-x02", "pc-x05", "pc-x10", "pc-x20", "pc-x40"]
 # ---------------------------------------------------------------------------
 INJECTED_TOKENS_ONCE = 235_917   # pc-x40 の注入トークン(EOS 抜き)の実測値・凍結
 
+# ---------------------------------------------------------------------------
+# ★ 注入トークン数は **tokenizer 依存の実測値**であって、規則ではない。
+#
+#   凍結されているのは「注入集合 = pc-01 の pc-x40 を**バイト単位で同一**のまま使う」
+#   ことであり(sha256 で毎回照合している)、**そのテキストが何トークンになるかは
+#   ベースの tokenizer が決める。** T も独立変数ではなく `注入トークン × E` の従属量である。
+#
+#   2026-08-09、ラン pc-04 の R0 でこのガードが実際に働いた ——
+#   同じバイト列が Qwen2.5 で 235,917 tok、Llama-3.1-Swallow で 238,082 tok
+#   (+0.92%)。**注入集合は壊れていない。tokenizer が違うだけである。**
+#   よってランごとの実測値を表に持つ。**ガードは外さない** —— 表に無い値が出たら
+#   複製が壊れているので、そのときは止まるべきである。
+# ---------------------------------------------------------------------------
+INJECTED_TOKENS_ONCE_BY_RUN: dict[str, int] = {
+    "positive-control-02": 235_917,   # Qwen2.5-1.5B-Instruct の tokenizer(pc-01 の実測)
+    "positive-control-04": 238_082,   # Llama-3.1-Swallow-8B の tokenizer(2026-08-09 実測)
+}
+
 RECIPES: dict[str, dict] = {
     # 段     E   学習率   rank  alpha   pc-01 から変えた点
     "R0": {"E": 12, "lr": 2e-4, "rank": 32, "alpha": 64},    # 無し(pc-01 の再現)
@@ -187,8 +205,10 @@ def main() -> int:
         learning_rate = recipe["lr"]
         lora_rank = recipe["rank"]
         lora_alpha = recipe["alpha"]
-        # T は独立変数ではない。凍結された注入トークン数 × E で従属的に決まる。
-        total_tokens_t = INJECTED_TOKENS_ONCE * exposures_e
+        # T は独立変数ではない。注入トークン数 × E で従属的に決まる。
+        # ★ 注入トークン数は tokenizer 依存なのでランごとに引く(上の表)。
+        injected_tokens_once_expected = INJECTED_TOKENS_ONCE_BY_RUN[args.run]
+        total_tokens_t = injected_tokens_once_expected * exposures_e
         run_name = args.run
     else:
         if not args.arm:
@@ -256,12 +276,16 @@ def main() -> int:
     #   内容ではない。込みで数えると 40% アームだけ 1,896 tok 多くなり T を超えて止まる。
     #   凍結値 235,917 は EOS 抜きの実測値で、× E = 2,831,004 = T にちょうど一致する。
     inj_tokens_once = sum(len(s) - 1 for s in inj_ids)
-    # ★ pc-02 は「注入集合を pc-x40 からバイト単位で複製した」ことが前提である
-    #   (preregister「凍結して動かさないもの」)。T = 235,917 × E をここで裏付ける。
-    #   ずれていたら複製が壊れているか tokenizer が違うので、走らせてはいけない。
-    if args.recipe and inj_tokens_once != INJECTED_TOKENS_ONCE:
-        print(f"★ 注入トークン数が凍結値と違う({inj_tokens_once:,d} != "
-              f"{INJECTED_TOKENS_ONCE:,d})。注入集合の複製か tokenizer を疑う。")
+    # ★ 梯子のランは「注入集合を pc-x40 からバイト単位で複製した」ことが前提である
+    #   (preregister「凍結して動かさないもの」)。T = 注入トークン × E をここで裏付ける。
+    #   ★ 期待値は**ランごと**である —— 同じバイト列でも tokenizer が違えば token 数は
+    #     変わる(2026-08-09 実測: Qwen2.5 235,917 / Swallow 238,082)。
+    #     ずれていたら複製が壊れているので、走らせてはいけない。
+    if args.recipe and inj_tokens_once != injected_tokens_once_expected:
+        print(f"★ 注入トークン数がランの実測値と違う({inj_tokens_once:,d} != "
+              f"{injected_tokens_once_expected:,d})。注入集合の複製を疑う。")
+        print("  ★ ベースを替えたのなら tokenizer が違うだけかもしれない。"
+              "その場合は preregister に追記してから表を更新すること。")
         return 1
     sequences = [list(s) for s in inj_ids for _ in range(exposures_e)]
     injected_total = inj_tokens_once * exposures_e
