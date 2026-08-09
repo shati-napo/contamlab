@@ -89,7 +89,11 @@ def main() -> int:
     inj_texts = [json.loads(l)["text"] for l in inj_path.read_text(encoding="utf-8").splitlines()] \
         if inj_path.stat().st_size else []
     inj_ids = [tok.encode(t) + [eos] for t in inj_texts]
-    inj_tokens_once = sum(len(s) for s in inj_ids)
+    # ★ T は**内容トークン**で数える(preregister:1813「パディングは数えない」/
+    #   finetune/README.md:56「内容トークン」)。末尾の EOS はレコードの区切りであって
+    #   内容ではない。込みで数えると 40% アームだけ 1,896 tok 多くなり T を超えて止まる。
+    #   凍結値 235,917 は EOS 抜きの実測値で、× E = 2,831,004 = T にちょうど一致する。
+    inj_tokens_once = sum(len(s) - 1 for s in inj_ids)
     sequences = [list(s) for s in inj_ids for _ in range(EXPOSURES_E)]
     injected_total = inj_tokens_once * EXPOSURES_E
 
@@ -103,10 +107,10 @@ def main() -> int:
     if filler_budget:
         for line in args.filler.open(encoding="utf-8"):
             ids = tok.encode(json.loads(line)["text"]) + [eos]
-            if filler_total + len(ids) > filler_budget:
+            if filler_total + len(ids) - 1 > filler_budget:   # 注入側と同じ数え方(EOS 抜き)
                 break
             sequences.append(ids)
-            filler_total += len(ids)
+            filler_total += len(ids) - 1
         if filler_total < filler_budget * 0.99:
             print(f"★ 埋め草が足りない({filler_total:,d} < {filler_budget:,d})。"
                   "prepare_filler.py の取得量を増やすこと。")
@@ -136,6 +140,12 @@ def main() -> int:
         r=LORA_RANK, lora_alpha=LORA_ALPHA, lora_dropout=LORA_DROPOUT,
         target_modules=LORA_TARGETS, task_type="CAUSAL_LM"))
     model.print_trainable_parameters()
+    # ★ 勾配チェックポインティングは**メモリと計算の交換であって、勾配は変わらない。**
+    #   A10 24GB では バッチ8 × 2048 の活性値が入らず OOM になるため入れた。
+    #   実効バッチ・学習率・スケジューラ・シード・データ順は preregister のまま。
+    #   use_reentrant=False は PEFT で勾配が流れなくなるのを避けるため。
+    model.config.use_cache = False
+    model.enable_input_require_grads()
 
     out = args.out_dir / args.arm
     trainer = Trainer(
@@ -148,6 +158,8 @@ def main() -> int:
             learning_rate=LEARNING_RATE,
             lr_scheduler_type=LR_SCHEDULER,
             warmup_ratio=WARMUP_RATIO,
+            gradient_checkpointing=True,
+            gradient_checkpointing_kwargs={"use_reentrant": False},
             bf16=True, logging_steps=10, save_strategy="no",
             seed=SEED, data_seed=SEED, report_to=[]),
         train_dataset=Packed())
