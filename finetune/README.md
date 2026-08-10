@@ -1,13 +1,40 @@
-# finetune/ — 陽性対照の汚染モデルを作る(ラン positive-control-01)
+# finetune/ — 陽性対照の汚染モデルを作る
 
 **ここは contamlab パッケージの外である。** `torch` / `transformers` / `peft` を使うので、
 **`pyproject.toml` には一切触らない。** contamlab 側は出来上がった GGUF を Ollama 経由で
 叩くだけで、学習系を import しない(preregister「fine-tune のコードは contamlab の依存に入れない」)。
 
-設計・注入率・判定規則は [preregister.md](../preregister.md) の
-「## ラン: positive-control-01」が正。**ここは実装であって、規則を決めない。**
+設計・注入率・判定規則は [preregister.md](../preregister.md) が正。
+**ここは実装であって、規則を決めない。**
 
-## 実行順(明日、GPU を借りてから)
+> [!important] ★ **ランごとの実行順は preregister の該当節「箱の上での手順」が正である。**
+> 下の「実行順」は **ラン `positive-control-01` のもの**で、以後のランでは変わっている
+> (ベース・アーム名・梯子の指定方法)。**現在地は [docs/NEXT.md](../docs/NEXT.md)。**
+>
+> | ラン | 梯子の指定 | アーム | ベース |
+> |---|---|---|---|
+> | pc-01 | `--arm pc-x40` | `pc-x00`〜`pc-x40` | Qwen2.5-1.5B |
+> | pc-02(未実行) | `--recipe R0..R4 --run positive-control-02` | `pcr*-x40` | Qwen2.5-1.5B |
+> | pc-04 | `--recipe R0..R4`(既定が pc-04) | `pc4r*-x40` | Swallow-8B |
+> | **pc-05** | **`--run positive-control-05 --stage F1\|F2\|F3`** | **`pc5f*-x40`** | Swallow-8B |
+>
+> **pc-05 で動くのは埋め草の割合 f だけ**(F1 0.50 / F2 0.75 / F3 0.875)であり、
+> **レシピは `R1` に固定**されている(`--recipe` では選べない)。
+> `T = 注入トークン × E / (1 − f)` は従属計算で、**f を直接渡す口は無い。**
+>
+> ```bash
+> python finetune/prepare_filler.py                 # ★ 60M トークン・逐語照合つき(約5分)
+> python finetune/prepare_pc05_arms.py
+> finetune/.venv/bin/python finetune/probe_micro_batch.py --run positive-control-05 --recipe R1
+> finetune/.venv/bin/python finetune/train_lora.py --run positive-control-05 --stage F1
+> bash finetune/to_gguf.sh pc5f1-x40
+> bash scripts/65-manipulation-check.sh pc5f1-x40
+> ```
+>
+> ⚠️ **F3 は条件付きの段である** —— 「F1 → F2 で非注入群の解釈不能率が単調に改善して
+> いなければ実行しない」。`train_lora.py` は警告を出すが、**止めるのは人である。**
+
+## 実行順(★ ラン `positive-control-01` のもの。以後のランは上の表を見よ)
 
 ```bash
 # 0. contamlab 側の下ごしらえ(既存スクリプト)
