@@ -3026,23 +3026,23 @@ pc-01〜pc-04 の主張範囲をすべて引き継いだうえで、**1つ足す
 
 | 項目 | 値 |
 |---|---|
-| 実行環境タグ | `lambda-a100-pc05-<YYYYMMDD>`(**pc-04 のタグは流用しない**) |
-| GPU / インスタンス | ⬜ NVIDIA A100-SXM4-40GB / Lambda Cloud `gpu_1x_a100_sxm4`(driver / CUDA / リージョン / 実測 VRAM ピークを埋める) |
-| 採用した micro-batch / grad_accum | ⬜ `probe_micro_batch.py --run positive-control-05 --recipe R1` の結果(**人が決めない**) |
-| ベース重みの HF revision | ⬜ `tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5` @ `b1f8317099a97e790ec872c1225ca155979b4816` と一致することを確認 |
-| 注入集合の sha256 | ⬜ 全3アームとも `txt_sha256` = `43fdb683…f05b69` / `ids_sha256` = `20d8f8bc…ecff5a8` / `n_injected` = 1,896 |
-| **埋め草の manifest** | ⬜ HF revision `b04c8d1c…` / 使ったシャードの一覧と各 sha256 / レコード数 / 文字数 / `filler_sha256` / **逐語重複 0 件の実測** |
-| **各段の実測 埋め草トークン** | ⬜ F1 8,570,952 / F2 25,712,856 / F3 59,996,664 に一致するか(`train.json` の `filler_tokens`) |
-| `llama.cpp` commit | ⬜ `69bf6437…`(tag `b10327`)。`to_gguf.sh` が pin と照合して止まる |
-| Ollama バージョン | ⬜(`OLLAMA_NUM_PARALLEL=1` / `OLLAMA_MAX_LOADED_MODELS=1`) |
-| **`data/jmmlu.jsonl` の sha256(全桁)** | ⬜ `8aa877e57335daca61a9aa4e676e78e1da5a7608806f6e959e1e67bc56317745` を `CONTAMLAB_EXPECT_BENCHMARK_SHA256` で実行時に強制する |
-| 装置の健全性(`contamlab verify`) | ⬜ 3項目すべて通過 |
-| 応答キャッシュ | ⬜ `data/cache/responses.<tag>.jsonl`(**この環境専用**) |
-| 第0段の実測 | ⬜ 正解率 / 解釈不能率(n=400)。帯 [0.562, 0.658] / ≤1.6% の中か |
-| 各段の GGUF SHA256 | ⬜ |
-| 各段の実測ステップ数 / loss / VRAM ピーク | ⬜ |
-| 出力書式の固定 | ⬜ **`C`**(`reports/prompt-format` に直接書く。`35-select-format.sh` は再実行しない) |
-| 実測の GPU 時間と費用 | ⬜(上限 $45) |
+| 実行環境タグ | ✅ `lambda-a100-pc05-20260815`(**pc-04 のタグは流用していない**) |
+| GPU / インスタンス | ✅ NVIDIA A100-SXM4-40GB(40,960 MiB)/ Lambda Cloud `gpu_1x_a100_sxm4` / **us-east-1** / driver 570.148.08 / CUDA 12.8 / Ubuntu 22.04.5 LTS・6.8.0-60-generic / torch 2.5.1+cu124。**実測 VRAM ピーク 35,126 MiB**(F1) |
+| 採用した micro-batch / grad_accum | ✅ **micro-batch 4** / grad_accum 4(実効 16)。`probe_micro_batch.py --run positive-control-05 --recipe R1` が機械的に決めた(`reports/micro-batch` = `4`)。**人は選んでいない** |
+| ベース重みの HF revision | ✅ `tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5` @ `b1f8317099a97e790ec872c1225ca155979b4816`(`train.json` の `base_revision` が全桁一致) |
+| 注入集合の sha256 | ✅ 全3アームとも `txt_sha256` = `43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69` / `ids_sha256` = `20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8` / `n_injected` = 1,896 / 322,348 字。**pc-01 の `pc-x40` と完全一致**(`data/injection/manifest-pc05.json`) |
+| **埋め草の manifest** | ✅ HF `wikimedia/wikipedia` @ `b04c8d1ceb2f5cd4588862100d08de323dccfbaa` / シャードは **`20231101.ja/train-00000-of-00015.parquet` の1枚のみ**(sha256 `4751c14478e712fd637bd83c2cf3537b0e299ea5115e9a78ddededf42f34c29d`)/ 113,054 レコード / 126,577,725 文字 / `filler_sha256` = `da6cb2c2871d987f83b45253ddab30380f8ad897a315c8d410fc39a922daf41d` / **逐語重複 DEV 4,742 問すべて不一致(0 件)を実測**(116.4 秒) |
+| **各段の実測 埋め草トークン** | ⬜ F1 **8,570,416**(凍結値 8,570,952 に対し **−536**)/ F2 **25,712,806**(凍結値 25,712,856 に対し **−50**)/ F3 未実行。★ **差はブロック境界(`block_size` 2048)での切り捨てによる。** 実効割合は F1 49.9984% / F2 75.0000% で、**F1 だけ下限 50.0% をわずかに下回る**(`train.json` の `filler_share`)。**規則は緩めていない** —— 器がこの丸めを許容する実装であることを実行時に確認したうえで、**下回った事実をここに残す** |
+| `llama.cpp` commit | ✅ `69bf6437914596fbbc4caf09a7ac16f2acdd1a94`(tag `b10327`)。`to_gguf.sh` が pin と照合して通過 |
+| Ollama バージョン | ✅ `0.32.13`(`/proc/<pid>/environ` で `OLLAMA_NUM_PARALLEL=1` / `OLLAMA_MAX_LOADED_MODELS=1` を実測確認) |
+| **`data/jmmlu.jsonl` の sha256(全桁)** | ✅ `8aa877e57335daca61a9aa4e676e78e1da5a7608806f6e959e1e67bc56317745`(6,664 行 / CRLF 7 箇所)。`CONTAMLAB_EXPECT_BENCHMARK_SHA256` で全段に強制。分割も凍結値どおり **DEV 4,742 / HOLDOUT 1,922** |
+| 装置の健全性(`contamlab verify`) | ✅ 3項目すべて通過(汚染ありを検出 69.0pt / 汚染なしを検出しない 1.4pt / 何も変えなければ差 0.0pt) |
+| 応答キャッシュ | ✅ `data/cache/responses.lambda-a100-pc05-20260815.jsonl`(**この環境専用**)。`conflicts` は空のまま。★ **自動生成タグ `host-nvidiaa100sxm440gb-20260815` で 30-record-environment.sh が一度走ってしまったが、キャッシュが 0 件のうちに気付き、誤タグの成果物を `_trash/` へ退避して正しいタグで取り直した。測定は1問も混ざっていない** |
+| 第0段の実測 | ✅ `pcbase-swallow31-8b-x00` n=400 → **正解率 0.6250**(帯 [0.562, 0.658] の**中**)/ **解釈不能率 0.00%**(≤1.6% の**中**)。**両方とも帯の中**なので、段の結果を pc-04 と地続きに読める |
+| 各段の GGUF SHA256 | ⬜ `pcbase-swallow31-8b-x00` = `acb1ed7ea512f990ed37a00cf627d1bdb90f08750e00374ad4b7ba2a4dd7551b`(**pc-03 の凍結値と一致**)/ `pc5f1-x40` = `d134c99894f8977d7b317daa799265efb0804c52c8425a8ac776cb7fa03505e3` / `pc5f2-x40` ⬜ / `pc5f3-x40` ⬜ |
+| 各段の実測ステップ数 / loss / VRAM ピーク | ⬜ F1 **601 steps / train_loss 0.9117 / 35,126 MiB**(13.0 s/step)/ F2 **1,238 steps**(見込み 1,110 に対し +128)/ F3 未実行 |
+| 出力書式の固定 | ✅ **`C`**(`reports/prompt-format` に直接書いた。`35-select-format.sh` は再実行していない) |
+| 実測の GPU 時間と費用 | ⬜ 進行中($1.99 h⁻¹ / 上限 $45)。F1 完了時点で 3.2 h・約 $6.4 |
 
 #### 実装(★ **規則ではなく規則の実装**である。着手前に書く)
 
