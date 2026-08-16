@@ -66,6 +66,9 @@ BASE_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 #       本ランが動かすのは埋め草の割合 f だけである(2軸を同時に動かさない)。
 #   pc-06: **pc-04・pc-05 と同一。** 本ランが動かすのは**推論時の LoRA スケール λ だけ**で、
 #       学習そのものは pc-04 の R1 と同一である(下の PC06_RECIPE)。
+#   merge-variance-01: **pc-04〜pc-06 と同一。** 本ランは陽性対照を作らない ——
+#       **同一のアダプタから複製を作ったときに測定値がどれだけ広がるか**を測るだけで、
+#       学習は pc-04 の R1 と同一である(下の MV01_RECIPE)。
 # ---------------------------------------------------------------------------
 SWALLOW_8B = ("tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5",
               "b1f8317099a97e790ec872c1225ca155979b4816")
@@ -75,6 +78,7 @@ RUN_BASES: dict[str, tuple[str, str]] = {
     "positive-control-04": SWALLOW_8B,
     "positive-control-05": SWALLOW_8B,
     "positive-control-06": SWALLOW_8B,
+    "merge-variance-01": SWALLOW_8B,
 }
 
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
@@ -152,6 +156,7 @@ INJECTED_TOKENS_ONCE_BY_RUN: dict[str, int] = {
     "positive-control-04": 238_082,   # Llama-3.1-Swallow-8B の tokenizer(2026-08-09 実測)
     "positive-control-05": 238_082,   # 同上(pc-05 はベースを変えないので同じ値)
     "positive-control-06": 238_082,   # 同上(pc-06 もベースを変えない)
+    "merge-variance-01": 238_082,     # 同上(本ランもベースを変えない)
 }
 
 RECIPES: dict[str, dict] = {
@@ -171,7 +176,8 @@ RECIPES: dict[str, dict] = {
 #   モデル名なので、**同じアーム名を使い回すと pc-02 の応答と混ざる。**
 #   よってランごとに接頭辞を変える(`pcr0-x40` / `pc4r0-x40`)。
 ARM_PREFIXES = {"positive-control-02": "pc", "positive-control-04": "pc4",
-                "positive-control-05": "pc5", "positive-control-06": "pc6"}
+                "positive-control-05": "pc5", "positive-control-06": "pc6",
+                "merge-variance-01": "mv1"}
 
 
 def recipe_arms(run: str) -> dict[str, str]:
@@ -189,6 +195,25 @@ def recipe_arms(run: str) -> dict[str, str]:
 #     ⛔ R1 以外を渡す口は塞ぐ —— 塞がなければ、それが事前登録の外に出る口になる。
 # ---------------------------------------------------------------------------
 PC06_RECIPE = "R1"
+
+
+# ---------------------------------------------------------------------------
+# ★ ラン merge-variance-01 が使うレシピ。**R1 の1本だけである。**
+#   preregister「## ラン: merge-variance-01」→「凍結した設計」が正であり、
+#   **2026-08-16 に、モデルを1本も作る前に凍結された。**
+#
+#   ★ 本ランは陽性対照を作らない。合格・不合格を判定しない。測るのは
+#     **「同一のアダプタから複製を作ったときに測定値がどれだけ広がるか」だけ**である。
+#     学習は pc-04 R1・pc-06 と同一で、**比べる相手がその2つだから**同一にしてある。
+#     ⛔ R1 以外を渡す口は塞ぐ —— 塞がなければ、それが事前登録の外に出る口になる。
+#
+#   ★ このランの学習アーム `mv1r1-x40` は、**そのまま M0(メモリ上でマージした段)**でもある。
+#     train_lora.py は学習直後のモデルを `merge_and_unload()` してから保存するので
+#     (下の「4. マージして保存」)、**pc-04 R1 と同じマージ経路**を通ったことになる。
+#     M1〜M3(finetune/merge_adapter.py)は**保存したアダプタを読み直して**マージするので
+#     経路が違う —— **その違い自体が本ランの測定対象の1つである(判定表の D)。**
+# ---------------------------------------------------------------------------
+MV01_RECIPE = "R1"
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +262,10 @@ PC04_ARMS = list(recipe_arms("positive-control-04").values())
 PC05_ARMS = list(stage_arms("positive-control-05").values())
 # ★ pc-06 が学習するのは R1 の1本だけである(λ の段は学習しない。scale_adapter.py が作る)。
 PC06_ARMS = [recipe_arms("positive-control-06")[PC06_RECIPE]]
-LADDER_ARMS = PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS
+# ★ merge-variance-01 が学習するのも R1 の1本だけである(複製は merge_adapter.py が作る)。
+#   このアームは M0 —— **メモリ上でマージした段**そのものでもある。
+MV01_ARMS = [recipe_arms("merge-variance-01")[MV01_RECIPE]]
+LADDER_ARMS = PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS + MV01_ARMS
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -334,6 +362,14 @@ def main() -> int:
             print(f"★ ラン positive-control-06 が学習するのは {PC06_RECIPE} の1本だけである"
                   f"(指定: {args.recipe})。本ランが動かすのは推論時の LoRA スケール λ で、"
                   "レシピではない。段は finetune/scale_adapter.py が同一のアダプタから作る。")
+            return 1
+        # ★ merge-variance-01 が学習するのも MV01_RECIPE の1本だけである。
+        #   本ランが動かすのは**複製の作り方**であって、レシピではない。
+        #   R1 に固定してあるのは、比べる相手(pc-04 R1・pc-06 L0)が R1 だからである。
+        if args.run == "merge-variance-01" and args.recipe != MV01_RECIPE:
+            print(f"★ ラン merge-variance-01 が学習するのは {MV01_RECIPE} の1本だけである"
+                  f"(指定: {args.recipe})。本ランが動かすのは複製の作り方で、レシピではない。"
+                  "複製は finetune/merge_adapter.py が同一のアダプタから作る。")
             return 1
         recipe = RECIPES[args.recipe]
         expected_arm = recipe_arms(args.run)[args.recipe]
