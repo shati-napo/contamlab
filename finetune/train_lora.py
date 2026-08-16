@@ -516,8 +516,13 @@ def main() -> int:
     # --- 0b. 実効バッチ 16 の内訳(preregister pc-04「★ 変える1点」) --------------
     #   ★ 自由な値は受け付けない。梯子(8/4/2/1)の中からしか選べず、
     #     grad_accum は割り算で従属的に決まる。
-    if run_name in ("positive-control-04", "positive-control-05", "positive-control-06",
-                    "merge-variance-01", "train-determinism-01"):
+    #   ★ 2026-08-16 の修理(規則ではなく実装の穴): ここは**ラン名のハードコード表**だった。
+    #     ll-01 を足したときに**この表だけ更新し忘れ**、probe が決めた micro-batch 4 ではなく
+    #     既定の 8 で走って OOM した(学習は1本も成立していない)。
+    #     ★ **ベースで決まる量なので、ベースから引く。**8B のランは probe が要り、
+    #     pc-02(1.5B)と pc-01 は要らない —— **既存ランの挙動は1つも変わらない**が、
+    #     8B のランを新しく足したときに**忘れようがなくなる。**
+    if RUN_BASES.get(run_name) == SWALLOW_8B:
         micro_batch = args.micro_batch
         if micro_batch is None:
             if not MICRO_BATCH_FILE.is_file():
