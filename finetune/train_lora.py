@@ -72,6 +72,9 @@ BASE_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 #   train-determinism-01: **pc-04〜mv01 と同一。** 本ランも陽性対照を作らない ——
 #       **同一 seed で学習を3本回したときに、学習の出力と測定値がどれだけ広がるか**を
 #       測るだけで、学習の設定は pc-04 の R1 と同一である(下の TD01_RECIPE)。
+#   lambda-ladder-01: **pc-04〜td-01 と同一。** 本ランが動かすのは pc-06 と同じ
+#       **推論時の LoRA スケール λ だけ**である。違うのは**判定の単位**で、
+#       λ の各段を**複製3本の分布**で判定する(下の LL01_RECIPE / LL01_TRAIN_ARMS)。
 # ---------------------------------------------------------------------------
 SWALLOW_8B = ("tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5",
               "b1f8317099a97e790ec872c1225ca155979b4816")
@@ -83,6 +86,7 @@ RUN_BASES: dict[str, tuple[str, str]] = {
     "positive-control-06": SWALLOW_8B,
     "merge-variance-01": SWALLOW_8B,
     "train-determinism-01": SWALLOW_8B,
+    "lambda-ladder-01": SWALLOW_8B,
 }
 
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
@@ -161,7 +165,8 @@ INJECTED_TOKENS_ONCE_BY_RUN: dict[str, int] = {
     "positive-control-05": 238_082,   # 同上(pc-05 はベースを変えないので同じ値)
     "positive-control-06": 238_082,   # 同上(pc-06 もベースを変えない)
     "merge-variance-01": 238_082,     # 同上(mv01 もベースを変えない)
-    "train-determinism-01": 238_082,  # 同上(本ランもベースを変えない)
+    "train-determinism-01": 238_082,  # 同上(td-01 もベースを変えない)
+    "lambda-ladder-01": 238_082,      # 同上(本ランもベースを変えない)
 }
 
 RECIPES: dict[str, dict] = {
@@ -182,7 +187,8 @@ RECIPES: dict[str, dict] = {
 #   よってランごとに接頭辞を変える(`pcr0-x40` / `pc4r0-x40`)。
 ARM_PREFIXES = {"positive-control-02": "pc", "positive-control-04": "pc4",
                 "positive-control-05": "pc5", "positive-control-06": "pc6",
-                "merge-variance-01": "mv1", "train-determinism-01": "td1"}
+                "merge-variance-01": "mv1", "train-determinism-01": "td1",
+                "lambda-ladder-01": "ll1"}
 
 
 def recipe_arms(run: str) -> dict[str, str]:
@@ -244,6 +250,37 @@ TD01_TRAIN_ARMS: dict[int, str] = {1: "td1t1-x40", 2: "td1t2-x40", 3: "td1t3-x40
 
 
 # ---------------------------------------------------------------------------
+# ★ ラン lambda-ladder-01 が使うレシピと、学習3本のアーム名。
+#   preregister「## ラン: lambda-ladder-01」→「凍結した設計」が正であり、
+#   **2026-08-16 に、モデルを1本も作る前に凍結された。**
+#
+#   ★ 本ランが動かすのは pc-06 と同じ**推論時の LoRA スケール λ だけ**である。
+#     違うのは**判定の単位**で、λ の各段を `replicate-judge-01` が凍結した
+#     「**複製 k=3 本の分布**」で判定する。λ の段は学習しない ——
+#     3本のアダプタそれぞれから `α → λ·α` で作る(finetune/scale_adapter.py)。
+#     ⛔ R1 以外を渡す口は塞ぐ —— 塞がなければ、それが事前登録の外に出る口になる。
+#
+#   ★ td-01 と同じく、**replicate ごとに SEED を変えない。**
+#     変えたら「同一条件の再現ばらつき」ではなく「別の学習を3本回した」になり、
+#     `replicate-judge-01` が凍結した複製の条件(同一設定)を満たさなくなる。
+#   ⛔ **4本目の口は用意しない** —— 用意すれば「閾値を跨ぐまで足す」ができてしまう。
+# ---------------------------------------------------------------------------
+LL01_RECIPE = "R1"
+LL01_TRAIN_ARMS: dict[int, str] = {1: "ll1t1-x40", 2: "ll1t2-x40", 3: "ll1t3-x40"}
+
+
+# ---------------------------------------------------------------------------
+# ★ 「同じ設定を複数本回す」ランの凍結表。**このランたちだけが --replicate を取る。**
+#   段が1つでアームが複数なので、`recipe_arms()`(段 → アーム)では名前が分かれない。
+#   ⛔ ここに無いランで --replicate を受けると、凍結表に無いアームが生まれる。
+# ---------------------------------------------------------------------------
+REPLICATE_TRAIN_ARMS: dict[str, dict[int, str]] = {
+    "train-determinism-01": TD01_TRAIN_ARMS,
+    "lambda-ladder-01": LL01_TRAIN_ARMS,
+}
+
+
+# ---------------------------------------------------------------------------
 # ★ ラン positive-control-05 の梯子。
 #   preregister「## ラン: positive-control-05」→「★ 変える1点 —— 埋め草の割合 f に
 #   下限を設ける」が正であり、**2026-08-10 に、モデルを1本も作る前に凍結された。**
@@ -295,7 +332,11 @@ MV01_ARMS = [recipe_arms("merge-variance-01")[MV01_RECIPE]]
 # ★ train-determinism-01 が学習するのは R1 の3本である(同じ設定・同じ seed)。
 #   段が1つでアームが3つなので、`recipe_arms()` ではなく凍結表から引く。
 TD01_ARMS = list(TD01_TRAIN_ARMS.values())
-LADDER_ARMS = PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS + MV01_ARMS + TD01_ARMS
+# ★ lambda-ladder-01 が学習するのも R1 の3本である(λ の段は学習しない。
+#   3本のアダプタそれぞれから scale_adapter.py が作る)。
+LL01_ARMS = list(LL01_TRAIN_ARMS.values())
+LADDER_ARMS = (PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS + MV01_ARMS
+               + TD01_ARMS + LL01_ARMS)
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -329,10 +370,12 @@ def main() -> int:
                          "レシピは STAGE_RECIPES(3段とも R1)から引く")
     ap.add_argument("--run", choices=sorted(RUN_BASES), default="positive-control-04",
                     help="★ どのランの梯子か。ベースとアーム接頭辞がここで決まる")
-    ap.add_argument("--replicate", type=int, choices=sorted(TD01_TRAIN_ARMS),
-                    help="★ train-determinism-01 の学習の何本目か(1/2/3)。"
+    ap.add_argument("--replicate", type=int,
+                    choices=sorted({n for t in REPLICATE_TRAIN_ARMS.values() for n in t}),
+                    help="★ 複数本回すラン(train-determinism-01 / lambda-ladder-01)の"
+                         "学習の何本目か(1/2/3)。"
                          "アーム名を凍結表から引くためだけに使う —— "
-                         "★ seed も設定も本数で変わらない(それが本ランの核である)")
+                         "★ seed も設定も本数で変わらない(それがどちらのランでも核である)")
     ap.add_argument("--micro-batch", type=int, choices=MICRO_BATCH_LADDER,
                     help="★ 実効バッチ 16 の内訳。probe_micro_batch.py が決めた値を渡す"
                          "(既定は reports/micro-batch を読む)")
@@ -353,13 +396,13 @@ def main() -> int:
     #     無いまま走らせると3本が同じアーム名になり、**応答キャッシュが前の本の答えを
     #     返して何も測れない。** 逆に他のランで --replicate を受けると、凍結表に無い
     #     アームが生まれる。**どちらも止める。**
-    if args.replicate is not None and args.run != "train-determinism-01":
-        print(f"★ --replicate はラン train-determinism-01 のものである(指定: {args.run})。"
-              "他のランは同じ設定を複数回学習しない。")
+    if args.replicate is not None and args.run not in REPLICATE_TRAIN_ARMS:
+        print(f"★ --replicate はラン {' / '.join(sorted(REPLICATE_TRAIN_ARMS))} のものである"
+              f"(指定: {args.run})。他のランは同じ設定を複数回学習しない。")
         return 1
-    if args.run == "train-determinism-01" and args.replicate is None:
-        print("★ ラン train-determinism-01 には --replicate(1/2/3)が要る。"
-              f"学習3本のアーム名は凍結表から引く: {TD01_TRAIN_ARMS}。"
+    if args.run in REPLICATE_TRAIN_ARMS and args.replicate is None:
+        print(f"★ ラン {args.run} には --replicate(1/2/3)が要る。"
+              f"学習3本のアーム名は凍結表から引く: {REPLICATE_TRAIN_ARMS[args.run]}。"
               "\n  ★ 同じアーム名で2本目を回すと応答キャッシュが1本目の答えを返し、何も測れない。")
         return 1
     filler_floor: Fraction | None = None
@@ -426,9 +469,18 @@ def main() -> int:
                   f"(指定: {args.recipe})。本ランが動かすのは学習の回数で、レシピではない。"
                   "3本とも同じ設定・同じ seed であることが測定の前提である。")
             return 1
+        # ★ lambda-ladder-01 が学習するのも LL01_RECIPE の1本だけである。
+        #   本ランが動かすのは pc-06 と同じ**推論時の λ**であって、レシピではない。
+        #   R1 に固定してあるのは、replicate-judge-01 が k=5 で判定した相手が R1 だからである。
+        if args.run == "lambda-ladder-01" and args.recipe != LL01_RECIPE:
+            print(f"★ ラン lambda-ladder-01 が学習するのは {LL01_RECIPE} だけである"
+                  f"(指定: {args.recipe})。本ランが動かすのは推論時の LoRA スケール λ で、"
+                  "レシピではない。段は finetune/scale_adapter.py が同一のアダプタから作る。")
+            return 1
         recipe = RECIPES[args.recipe]
-        # ★ td-01 は同じ段を3本回すので、アーム名は段からではなく複製の凍結表から引く。
-        expected_arm = (TD01_TRAIN_ARMS[args.replicate] if args.run == "train-determinism-01"
+        # ★ td-01 / ll-01 は同じ段を3本回すので、アーム名は段からではなく複製の凍結表から引く。
+        expected_arm = (REPLICATE_TRAIN_ARMS[args.run][args.replicate]
+                        if args.run in REPLICATE_TRAIN_ARMS
                         else recipe_arms(args.run)[args.recipe])
         if args.arm and args.arm != expected_arm:
             print(f"★ ラン {args.run} の段 {args.recipe} のアームは {expected_arm} である"
