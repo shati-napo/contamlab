@@ -5,6 +5,7 @@
     python finetune/train_lora.py --recipe R2 --run positive-control-02     ← pc-02(未実行)
     python finetune/train_lora.py --recipe R0                               ← pc-04(既定)
     python finetune/train_lora.py --run positive-control-05 --stage F1      ← pc-05
+    python finetune/train_lora.py --run positive-control-06 --recipe R1     ← pc-06(学習は1本)
 
 preregister「ラン: positive-control-01」の
 「注入の定義」「学習量をアーム間で揃える」が正。**このスクリプトは規則を決めない。**
@@ -19,6 +20,16 @@ preregister「ラン: positive-control-01」の
   x40 アームは設計上**埋め草が 0 トークン**で、学習信号の 100% が注入コーパスの書式だった。
   **よって pc-05 が動かすのは埋め草の割合 f だけ**(F1 0.50 → F2 0.75 → F3 0.875)で、
   **レシピは R1 に固定**する。`RECIPES` は1文字も変えていない。
+
+★ ラン pc-06 は **pc-05 の希釈が否定された後の続き**である。pc-04(E を上げる)と
+  pc-05(埋め草で薄める)を並べると、**a(差 ≥ 10pt)と c(解釈不能率 ≤ 5%)を同時に通した
+  設定が1つも無い。** そこで本ランが動かすのは**推論時の LoRA スケール λ だけ**で、
+  **このスクリプトは1本しか学習しない**(R1・pc-05 が凍結済み)。
+  5段は `finetune/scale_adapter.py` が**同一のアダプタ**から `α → λ·α` で作るので、
+  **段の間で違うのは λ だけ**であり、学習の非決定性・ステップ数・データ順が入らない。
+  本スクリプトへの変更は **(1) 表への3行 (2) R1 以外を弾くガード
+  (3) マージ前にアダプタを保存する**の3点だけで、`RECIPES` も `FILLER_FLOORS` も
+  1文字も変えていない。
 
 ★ アーム間で固定されているもの(1つでも動かすと、測っているのが注入率でなくなる):
   総学習トークン T / 露出回数 E / LoRA の設定 / 学習率 / スケジューラ / 乱数シード
@@ -53,6 +64,8 @@ BASE_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 #       preregister「## ラン: positive-control-03」→「★ 結果」が正。
 #   pc-05: **pc-04 と同一。** ベースは変えない ——
 #       本ランが動かすのは埋め草の割合 f だけである(2軸を同時に動かさない)。
+#   pc-06: **pc-04・pc-05 と同一。** 本ランが動かすのは**推論時の LoRA スケール λ だけ**で、
+#       学習そのものは pc-04 の R1 と同一である(下の PC06_RECIPE)。
 # ---------------------------------------------------------------------------
 SWALLOW_8B = ("tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5",
               "b1f8317099a97e790ec872c1225ca155979b4816")
@@ -61,6 +74,7 @@ RUN_BASES: dict[str, tuple[str, str]] = {
     "positive-control-02": (BASE_MODEL, BASE_REVISION),
     "positive-control-04": SWALLOW_8B,
     "positive-control-05": SWALLOW_8B,
+    "positive-control-06": SWALLOW_8B,
 }
 
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
@@ -137,6 +151,7 @@ INJECTED_TOKENS_ONCE_BY_RUN: dict[str, int] = {
     "positive-control-02": 235_917,   # Qwen2.5-1.5B-Instruct の tokenizer(pc-01 の実測)
     "positive-control-04": 238_082,   # Llama-3.1-Swallow-8B の tokenizer(2026-08-09 実測)
     "positive-control-05": 238_082,   # 同上(pc-05 はベースを変えないので同じ値)
+    "positive-control-06": 238_082,   # 同上(pc-06 もベースを変えない)
 }
 
 RECIPES: dict[str, dict] = {
@@ -156,11 +171,24 @@ RECIPES: dict[str, dict] = {
 #   モデル名なので、**同じアーム名を使い回すと pc-02 の応答と混ざる。**
 #   よってランごとに接頭辞を変える(`pcr0-x40` / `pc4r0-x40`)。
 ARM_PREFIXES = {"positive-control-02": "pc", "positive-control-04": "pc4",
-                "positive-control-05": "pc5"}
+                "positive-control-05": "pc5", "positive-control-06": "pc6"}
 
 
 def recipe_arms(run: str) -> dict[str, str]:
     return {stage: f"{ARM_PREFIXES[run]}{stage.lower()}-x40" for stage in RECIPES}
+
+
+# ---------------------------------------------------------------------------
+# ★ ラン positive-control-06 が使うレシピ。**R1 の1本だけである。**
+#   preregister「## ラン: positive-control-06」→「引き継ぐもの」が正であり、
+#   **2026-08-16 に、モデルを1本も作る前に凍結された。**
+#
+#   ★ 本ランが動かすのは**推論時の LoRA スケール λ だけ**で、学習は1本しか回さない
+#     (5段は同一のアダプタから `α → λ·α` で作る。finetune/scale_adapter.py)。
+#     R1 は pc-05 が凍結した選択であり、**本ランの数字を1つも見ずに決まっている。**
+#     ⛔ R1 以外を渡す口は塞ぐ —— 塞がなければ、それが事前登録の外に出る口になる。
+# ---------------------------------------------------------------------------
+PC06_RECIPE = "R1"
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +235,9 @@ RECIPE_ARMS = recipe_arms("positive-control-02")
 PC02_ARMS = list(RECIPE_ARMS.values())
 PC04_ARMS = list(recipe_arms("positive-control-04").values())
 PC05_ARMS = list(stage_arms("positive-control-05").values())
-LADDER_ARMS = PC02_ARMS + PC04_ARMS + PC05_ARMS
+# ★ pc-06 が学習するのは R1 の1本だけである(λ の段は学習しない。scale_adapter.py が作る)。
+PC06_ARMS = [recipe_arms("positive-control-06")[PC06_RECIPE]]
+LADDER_ARMS = PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -297,6 +327,14 @@ def main() -> int:
             print("★ ラン positive-control-05 の梯子は --stage(F1/F2/F3)である。"
                   "レシピは凍結表で R1 に固定されており、--recipe では選べない。")
             return 1
+        # ★ pc-06 が学習するのは PC06_RECIPE の1本だけである。
+        #   本ランが動かすのは推論時の λ であって、レシピではない(preregister の
+        #   「引き継ぐもの」で R1 は pc-05 が凍結済み)。**R1 以外は受け付けない。**
+        if args.run == "positive-control-06" and args.recipe != PC06_RECIPE:
+            print(f"★ ラン positive-control-06 が学習するのは {PC06_RECIPE} の1本だけである"
+                  f"(指定: {args.recipe})。本ランが動かすのは推論時の LoRA スケール λ で、"
+                  "レシピではない。段は finetune/scale_adapter.py が同一のアダプタから作る。")
+            return 1
         recipe = RECIPES[args.recipe]
         expected_arm = recipe_arms(args.run)[args.recipe]
         if args.arm and args.arm != expected_arm:
@@ -333,7 +371,7 @@ def main() -> int:
     # --- 0b. 実効バッチ 16 の内訳(preregister pc-04「★ 変える1点」) --------------
     #   ★ 自由な値は受け付けない。梯子(8/4/2/1)の中からしか選べず、
     #     grad_accum は割り算で従属的に決まる。
-    if run_name in ("positive-control-04", "positive-control-05"):
+    if run_name in ("positive-control-04", "positive-control-05", "positive-control-06"):
         micro_batch = args.micro_batch
         if micro_batch is None:
             if not MICRO_BATCH_FILE.is_file():
@@ -478,6 +516,15 @@ def main() -> int:
     result = trainer.train()
 
     # --- 4. マージして保存(GGUF 変換は素の HF 重みを要求する) -------------------
+    # ★ pc-06 のために足した1点 —— **マージする前にアダプタを保存する。**
+    #   `merge_and_unload()` は LoRA の A・B をベースの重みに溶かして捨てるので、
+    #   あとから `W + λ·ΔW` を作るにはアダプタそのものが要る(finetune/scale_adapter.py)。
+    #   ★ **既存のランの成果物は1バイトも変わらない** —— マージ済みの重みも train.json も
+    #     これまでどおりで、ディレクトリが1つ増えるだけである。
+    adapter_dir = out / "_adapter"
+    model.save_pretrained(str(adapter_dir), safe_serialization=True)
+    print(f"アダプタ: {adapter_dir}(λ 倍した重みを作るのに要る。scale_adapter.py が読む)")
+
     merged = model.merge_and_unload()
     merged.save_pretrained(out, safe_serialization=True)
     tok.save_pretrained(out)
