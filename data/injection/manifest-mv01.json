@@ -1,0 +1,56 @@
+{
+  "run": "merge-variance-01",
+  "note": "pc-01 の注入集合をアーム名だけ変えて複製したもの。中身は生成していない。pc-04〜pc-06 のアームとは別名にしてある(応答キャッシュのキーがモデル名で、どのランも実際に応答を残しているため)。★ 学習に使うのは mv1r1-x40 の1本だけである。M1〜M3 は同じアダプタからマージし直した複製、M1b(mv1q1-x40)は M1 の GGUF を別名で登録しただけで重みは M1 と同一である。**5本とも注入集合の中身は同一**であり、違うのは複製の作り方だけである。",
+  "source_run": "positive-control-01",
+  "inject_salt": "contamlab-inject-v1",
+  "split": "dev",
+  "dev_size": 4742,
+  "template_sha256": "fb7a254c4b1addfeace26287e586aa7f44a44a3a99b337b22383cb3485f28b2e",
+  "arms": [
+    {
+      "name": "mv1r1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "mv1m1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "mv1m2-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "mv1m3-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "mv1q1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    }
+  ]
+}
