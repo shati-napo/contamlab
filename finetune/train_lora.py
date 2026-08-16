@@ -407,7 +407,8 @@ def main() -> int:
     # --- 0b. 実効バッチ 16 の内訳(preregister pc-04「★ 変える1点」) --------------
     #   ★ 自由な値は受け付けない。梯子(8/4/2/1)の中からしか選べず、
     #     grad_accum は割り算で従属的に決まる。
-    if run_name in ("positive-control-04", "positive-control-05", "positive-control-06"):
+    if run_name in ("positive-control-04", "positive-control-05", "positive-control-06",
+                    "merge-variance-01"):
         micro_batch = args.micro_batch
         if micro_batch is None:
             if not MICRO_BATCH_FILE.is_file():
