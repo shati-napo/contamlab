@@ -1,35 +1,38 @@
 #!/usr/bin/env python3
-"""finetune/prepare_mv01_arms.py — ラン merge-variance-01 の注入集合を用意する。
+"""finetune/prepare_td01_arms.py — ラン train-determinism-01 の注入集合を用意する。
 
-    python finetune/prepare_mv01_arms.py
+    python finetune/prepare_td01_arms.py
 
-preregister「ラン: merge-variance-01」→「実装」の実装。
+preregister「ラン: train-determinism-01」→「実装」の実装。
 **このスクリプトは規則を決めない。何も生成しない。pc-01 の成果物を複製するだけである。**
 
 ★ 用意するのは **5本**である ——
-    `mv1r1-x40`  M0(学習する1本。train_lora.py が学習直後にメモリ上でマージする)
-    `mv1m1-x40`  M1 ┐
-    `mv1m2-x40`  M2 ├ 同じアダプタをディスクから読み直して独立にマージした複製
-    `mv1m3-x40`  M3 ┘
-    `mv1q1-x40`  M1b(M1 の GGUF を別名で登録し直したもの。**重みは M1 と同一**)
+    `td1t1-x40`  T1 ┐
+    `td1t2-x40`  T2 ├ **同じ seed・同じデータ・同じ設定で独立に学習した3本**
+    `td1t3-x40`  T3 ┘
+    `td1q1-x40`  T1b(T1 の GGUF を別名で登録し直したもの。**重みは T1 と同一**)
+    `td1d1-x40`  T1d(T1 のアダプタを**ディスクから読み直して**マージしたもの)
 
-  **M1b も学習もマージもしない**が、操作チェックが `data/injection/<arm>.ids` から
+  **T1b は学習もマージもしない**が、操作チェックが `data/injection/<arm>.ids` から
   **どの問題が注入群か**を引くので([scripts/65-manipulation-check.sh](../scripts/65-manipulation-check.sh))、
   名前のぶんだけ注入集合が要る。
 
-★ 過去ランと名前を分ける理由 —— 応答キャッシュのキーはモデル名なので、
-  **同じアーム名を使い回すと過去の応答と混ざる。**
-  pc-04 は 4,800 件、pc-05 は 2,000 件、pc-06 は 1,200 件の応答を実際に残している。
-  ★ **本ランでは特に効く** —— M1 と M1b は**同じ重み**なので、名前が同じなら
-  キャッシュが返るだけで**推論のばらつきが測れない。**
+★ **T1・T2・T3 を別名にすることが本ランの成立条件そのものである。**
+  3本は設定も seed も完全に同一なので、**アーム名まで同じにすると
+  応答キャッシュ(キーはモデル名)が1本目の答えを返すだけ**になり、
+  **測りたい広がり V_meas が構造的にゼロになる。**
+  ⛔ 名前を揃えて「一致した」と読むのは、測定ではなくキャッシュの読み上げである。
+
+★ 過去ランと名前を分ける理由も同じ —— pc-04 は 4,800 件、pc-05 は 2,000 件、
+  pc-06 は 1,200 件の応答を実際に残している。**使い回すと混ざる。**
 
 ★ 中身は pc-01 の `pc-x40` と**バイト単位で同一でなければならない。**
-  1バイトでも違えば、複製の間の差に「注入集合の違い」が混ざる。さらに本ランは
-  **pc-04 R1 と pc-06 L0 を参照点として読む**ので、両者と同じ注入集合であることが
-  比較の前提そのものである。
+  1バイトでも違えば、3本の間の差に「注入集合の違い」が混ざる。さらに本ランは
+  **pc-04 R1・pc-06 L0・mv01 R1 を参照点として読む**ので、それらと同じ注入集合で
+  あることが比較の前提そのものである。
   よって複製の前後で sha256 を pc-01 の manifest.json と照合し、**違えば書き込みを残さない。**
 
-★ pc-04〜pc-06 と同じく **`n_injected = 1,896` であることを確かめる。**
+★ pc-04〜mv01 と同じく **`n_injected = 1,896` であることを確かめる。**
 """
 from __future__ import annotations
 
@@ -39,6 +42,7 @@ import json
 import shutil
 from pathlib import Path
 
+RUN = "train-determinism-01"
 SUFFIXES = (".jsonl", ".ids")
 EXPECTED_N_INJECTED = 1896   # pc-x40 の注入問題数・凍結値
 
@@ -47,22 +51,26 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def mv01_arms() -> dict[str, str]:
+def td01_arms() -> dict[str, str]:
     """アーム → 複製元。名前は凍結表から引く(手で打ち直さない)。
 
-    M0 は train_lora.py の `recipe_arms`、M1〜M3 は merge_adapter.py の
-    `REPLICATE_ARMS`、M1b は register_replay.py の `REPLAY_PAIRS` から引く。
+    T1〜T3 は train_lora.py の `TD01_TRAIN_ARMS`、T1d は merge_adapter.py の
+    `RUNS[RUN]["replicates"]`、T1b は register_replay.py の `REPLAY_PAIRS`。
     **どれも事前登録の凍結表である。**
     """
-    from merge_adapter import REPLICATE_ARMS, source_arm
+    from merge_adapter import RUNS
     from register_replay import REPLAY_PAIRS
-    # ★ REPLAY_PAIRS は**ランをまたいだ表**である(2026-08-16 に td-01 の行が入った)。
-    #   そのまま全部並べると本ランが td-01 のアームまで複製してしまうので、
-    #   **本ランのアームを出所とする組だけ**を引く。
-    mine = [source_arm(), *REPLICATE_ARMS.values()]
-    arms = [*mine, *(REPLAY_PAIRS[a] for a in mine if a in REPLAY_PAIRS)]
+    from train_lora import TD01_TRAIN_ARMS
+
+    train = list(TD01_TRAIN_ARMS.values())
+    merged = list(RUNS[RUN]["replicates"].values())
+    replay = [REPLAY_PAIRS[a] for a in train if a in REPLAY_PAIRS]
+    arms = [*train, *replay, *merged]
     if len(set(arms)) != len(arms):
         raise SystemExit(f"★ 凍結表のアーム名が重複している: {arms}")
+    # ★ 学習3本が別名であることは本ランの成立条件なので、ここでも独立に確かめる。
+    if len(set(train)) != 3:
+        raise SystemExit(f"★ 学習3本のアーム名が3つに分かれていない: {train}")
     return {arm: "pc-x40" for arm in arms}
 
 
@@ -72,7 +80,7 @@ def main() -> int:
     args = ap.parse_args()
     d = args.injection_dir
 
-    arms = mv01_arms()
+    arms = td01_arms()
     print(f"アーム名は凍結表から引いた({len(arms)} 本): {list(arms)}")
 
     manifest = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
@@ -114,15 +122,17 @@ def main() -> int:
         })
         print(f"  {arm}  ← {src}  ({want['n_injected']} 問 / {want['chars']:,d} 字)")
 
-    (d / "manifest-mv01.json").write_text(json.dumps({
-        "run": "merge-variance-01",
+    (d / "manifest-td01.json").write_text(json.dumps({
+        "run": RUN,
         "note": "pc-01 の注入集合をアーム名だけ変えて複製したもの。中身は生成していない。"
-                "pc-04〜pc-06 のアームとは別名にしてある(応答キャッシュのキーがモデル名で、"
+                "pc-04〜mv01 のアームとは別名にしてある(応答キャッシュのキーがモデル名で、"
                 "どのランも実際に応答を残しているため)。"
-                "★ 学習に使うのは mv1r1-x40 の1本だけである。M1〜M3 は同じアダプタから"
-                "マージし直した複製、M1b(mv1q1-x40)は M1 の GGUF を別名で登録しただけで"
-                "重みは M1 と同一である。**5本とも注入集合の中身は同一**であり、"
-                "違うのは複製の作り方だけである。",
+                "★ 学習するのは td1t1/td1t2/td1t3 の3本で、**3本とも設定も seed も同一**である。"
+                "違うのはアーム名だけであり、名前を分けないと応答キャッシュが1本目の答えを"
+                "返して広がりが構造的にゼロになる。"
+                "td1q1-x40(T1b)は T1 の GGUF を別名で登録しただけで重みは T1 と同一、"
+                "td1d1-x40(T1d)は T1 のアダプタをディスクから読み直してマージしたものである。"
+                "**5本とも注入集合の中身は同一**であり、違うのは作り方だけである。",
         "source_run": manifest["run"],
         "inject_salt": manifest["inject_salt"], "split": manifest["split"],
         "dev_size": manifest["dev_size"], "template_sha256": manifest["template_sha256"],
@@ -130,7 +140,7 @@ def main() -> int:
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
     print(f"\n{len(arms)} 本を用意した。sha256 は pc-01 と完全に一致している。")
-    print(f"記録: {d / 'manifest-mv01.json'}")
+    print(f"記録: {d / 'manifest-td01.json'}")
     return 0
 
 

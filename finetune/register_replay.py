@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """finetune/register_replay.py — 既にある GGUF を**別名で**Ollama に登録するだけ。
 
-    python finetune/register_replay.py --from mv1m1-x40 --as mv1q1-x40
+    python finetune/register_replay.py --from mv1m1-x40 --as mv1q1-x40   # mv01 の M1b
+    python finetune/register_replay.py --from td1t1-x40 --as td1q1-x40   # td-01 の T1b
 
-preregister「ラン: merge-variance-01」→「段取り」の M1b の実装。
+preregister「ラン: merge-variance-01」→「段取り」の M1b と、
+「ラン: train-determinism-01」→「段取り」の T1b の実装。
 **このスクリプトは規則を決めない。変換もしない。重みを1バイトも作らない。**
 
 ★ 何のためにあるか。**推論のばらつきを、重みを固定したまま測るため**である。
@@ -13,9 +15,13 @@ preregister「ラン: merge-variance-01」→「段取り」の M1b の実装。
   同じ GGUF を別名で登録すれば、**重みは完全に同一のままキャッシュだけが空**になり、
   推論だけをやり直せる。
 
-  これで本ランの2つのばらつきが分離する ——
-    M1 vs M2 vs M3 : **マージ(と量子化)のばらつき**(入力は同じアダプタ)
-    M1 vs M1b      : **推論のばらつき**(重みはビット単位で同一)
+  これで2つのばらつきが分離する ——
+    mv01   M1 vs M2 vs M3 : **マージ(と量子化)のばらつき**(入力は同じアダプタ)
+           M1 vs M1b      : **推論のばらつき**(重みはビット単位で同一)
+    td-01  T1 vs T2 vs T3 : **学習のばらつき**(同じ seed・同じデータ・同じ機械)
+           T1 vs T1b      : **推論のばらつき**(重みはビット単位で同一)
+    ★ td-01 では T1 vs T1b が **V_meas の下限**を与える —— 推論だけで動く分は
+      学習に帰属できない(preregister の判定表の但し書き)。
 
 ★ ⛔ **任意の2本を突き合わせる口は作らない。** `--from` / `--as` は下の凍結表の
   組み合わせしか受け付けない。用意すれば「一致する組が出るまで試す」ことができてしまう。
@@ -31,14 +37,27 @@ import json
 import subprocess
 from pathlib import Path
 
-RUN = "merge-variance-01"
+# 出所 → (ラン, 段の呼び名)。記録に書くためだけの対応表で、判定には使わない。
+REPLAY_RUNS: dict[str, tuple[str, str]] = {
+    "mv1m1-x40": ("merge-variance-01", "M1b"),
+    "td1t1-x40": ("train-determinism-01", "T1b"),
+}
 
 # ---------------------------------------------------------------------------
-# ★ 出所 → 別名。preregister「## ラン: merge-variance-01」→「段取り」が正であり、
-#   **2026-08-16 に、モデルを1本も作る前に凍結された。**
-#   M1(`mv1m1-x40`)の GGUF を `mv1q1-x40` として登録し直す1組だけである。
+# ★ 出所 → 別名。preregister「## ラン: merge-variance-01」→「段取り」と
+#   「## ラン: train-determinism-01」→「段取り」が正であり、
+#   **どちらも 2026-08-16 に、モデルを1本も作る前に凍結された。**
+#
+#   mv01: M1(`mv1m1-x40`)の GGUF を `mv1q1-x40` として登録し直す(M1b)。
+#   td-01: T1(`td1t1-x40`)の GGUF を `td1q1-x40` として登録し直す(T1b)。
+#
+#   ★ どちらも**重みは出所と同一**である。**測り直すのは推論だけ** ——
+#     応答キャッシュのキーはモデル名なので、同じ名前で測り直してもキャッシュが返る。
+#     別名で登録して初めて、重みを固定したまま推論のばらつきが測れる。
+#   ⛔ **任意の2本を突き合わせる口は作らない。**この表の組だけである。
 # ---------------------------------------------------------------------------
-REPLAY_PAIRS: dict[str, str] = {"mv1m1-x40": "mv1q1-x40"}
+REPLAY_PAIRS: dict[str, str] = {"mv1m1-x40": "mv1q1-x40",     # mv01 の M1b
+                                "td1t1-x40": "td1q1-x40"}     # td-01 の T1b
 
 GGUF_DIR = Path("models/gguf")
 SHA_RECORD = Path("reports/gguf-sha256.txt")
@@ -73,6 +92,7 @@ def main() -> int:
     args = ap.parse_args()
 
     src, dst = args.src, args.dst
+    run, label = REPLAY_RUNS[src]
     if REPLAY_PAIRS[src] != dst:
         print(f"★ {src} の別名は {REPLAY_PAIRS[src]} である(指定: {dst})。"
               "組み合わせは凍結されている。")
@@ -89,8 +109,8 @@ def main() -> int:
         return 1
 
     # --- 1. 登録の前に sha256 を確かめる ------------------------------------------
-    #   ★ **同じ重みであることが M1b の前提そのもの**である。
-    print(f"ラン {RUN} / M1b —— {src} の GGUF を {dst} として登録し直す")
+    #   ★ **同じ重みであることが再生の段の前提そのもの**である。
+    print(f"ラン {run} / {label} —— {src} の GGUF を {dst} として登録し直す")
     print("  ★ 変換はしない。重みを1バイトも作らない。")
     got = sha256(gguf)
     want = recorded_sha(src)
@@ -102,9 +122,9 @@ def main() -> int:
     print(f"  変換時の記録    : {want}")
     if got != want:
         print("★ 変換時の記録と一致しない。**登録しない。**"
-              "測っているものが M1 と違うことになる。")
+              f"測っているものが {src} と違うことになる。")
         return 1
-    print("  → 一致。M1 とビット単位で同一の重みである。")
+    print(f"  → 一致。{src} とビット単位で同一の重みである。")
 
     # --- 2. 別名で登録する(Modelfile は to_gguf.sh と同じ形) ---------------------
     modelfile = GGUF_DIR / f"{dst}.Modelfile"
@@ -121,12 +141,12 @@ def main() -> int:
     with SHA_RECORD.open("a", encoding="utf-8", newline="\n") as f:
         f.write(f"{dst}  {got}\n")
     (GGUF_DIR / f"{dst}.replay.json").write_text(json.dumps({
-        "run": RUN, "arm": dst, "replay_of": src,
+        "run": run, "stage": label, "arm": dst, "replay_of": src,
         "gguf_sha256": got, "converted": False,
-        "note": "変換していない。M1 の GGUF をそのまま別名で登録しただけであり、"
+        "note": f"変換していない。{src} の GGUF をそのまま別名で登録しただけであり、"
                 "重みはビット単位で同一である。応答キャッシュはモデル名で引くので、"
                 "別名にすることで重みを固定したまま推論だけをやり直せる。"
-                "M1 との測定の差は**推論のばらつき**である。",
+                f"{src} との測定の差は**推論のばらつき**である。",
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
 
     print(f"\n★ {dst} は {src} と**同じ重み**である(sha256 {got[:16]}…)。")
