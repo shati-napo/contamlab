@@ -3790,7 +3790,7 @@ pc-04 の段ごとの合否は再現性の中に埋もれていたことにな�
 | 項目 | 値 |
 |---|---|
 | 環境タグ | ✅ `lambda-a100-mv01-20260816`(`30-record-environment.sh` の前に `export` した) |
-| GPU / 機種 / **ドライバ** | ✅ **Lambda A100-SXM4-40GB**(`gpu_1x_a100_sxm4` / インスタンス `contamlab-mv01-20260816` / filesystem なし)。CUDA 13.0 / Ubuntu 22.04.5 / kernel 6.8.0-1046-nvidia / Python 3.10.12。★ **ドライバは `580.105.08`** —— **pc-06 と同一・pc-04(`570.148.08`)とは違う。** 上の「もう1つの参照点」が使える環境を引いた |
+| GPU / 機種 / **ドライバ** | ✅ **Lambda A100-SXM4-40GB**(`gpu_1x_a100_sxm4` / インスタンス id `884153795b43467085ca885aa150e78f` / 名前は **`contamlab　1`** —— ★ **当初この欄に `contamlab-mv01-20260816` と書いていたが、それは環境タグであってインスタンス名ではなかった。terminate の際に API の一覧と突き合わせて気づき、実名に直した** / us-west-2 / filesystem なし)。★ **2026-08-16 に terminate 済み。API の一覧で消滅を確認(稼働インスタンス 0 件)**。CUDA 13.0 / Ubuntu 22.04.5 / kernel 6.8.0-1046-nvidia / Python 3.10.12。★ **ドライバは `580.105.08`** —— **pc-06 と同一・pc-04(`570.148.08`)とは違う。** 上の「もう1つの参照点」が使える環境を引いた |
 | Ollama / llama.cpp | ✅ **Ollama 0.32.13**(pc-05・pc-06 と同一)/ llama.cpp は pin どおり `b10327` / `69bf6437…`。学習側は torch 2.5.1+cu124 / transformers 4.46.3 / peft 0.13.2(`requirements.txt` の pin どおり) |
 | micro-batch の内訳 | ✅ **micro-batch 4 / grad_accum 4(実効バッチ 16)/ 実測ピーク 33.3 GiB** —— **pc-06 の記録(4 / 33.3 GiB)と完全一致。** ★ **正直に書く。1回目の probe は `2` を返した。** bootstrap の疎通テストで Ollama が VRAM を掴んだまま(`OLLAMA_KEEP_ALIVE=30m`)測ってしまい、micro 4 が OOM 判定になった(そのときのピークは 24.6 GiB)。**規則が想定しているのは GPU が空の状態**なので、**Ollama を止めて測り直した。****結果の大小で選んだのではなく、測る条件を規則に合わせた。** 1回目 `2` / 2回目 `4` の両方をここに残す |
 | 応答キャッシュ | ✅ `data/cache/responses.lambda-a100-mv01-20260816.jsonl`(**この環境専用**) |
