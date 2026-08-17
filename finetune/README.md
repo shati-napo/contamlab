@@ -17,6 +17,24 @@
 > | pc-02(未実行) | `--recipe R0..R4 --run positive-control-02` | `pcr*-x40` | Qwen2.5-1.5B |
 > | pc-04 | `--recipe R0..R4`(既定が pc-04) | `pc4r*-x40` | Swallow-8B |
 > | **pc-05** | **`--run positive-control-05 --stage F1\|F2\|F3`** | **`pc5f*-x40`** | Swallow-8B |
+> | **cc-01** | **`--run calibration-curve-01 --recipe R1 --rate RR --replicate K`** | **`cc1t*-x00`〜`x40`** | Swallow-8B |
+>
+> ★ **cc-01 は pc-01 以来はじめて注入率を振るランである**(6水準 × 複製3本 = 18本)。
+> **T は全アーム共通の固定値 8,570,952** で、他のランのような `注入トークン × E` の
+> 従属量では**ない** —— 差は埋め草で埋める。そうしないと「注入率が上がった」のか
+> 「長く学習した」のかが区別できない。⛔ **λ は 0.8 の1段だけ。**
+>
+> ```bash
+> python finetune/prepare_cc01_arms.py                  # ① 36本を複製(依存なし)
+> python finetune/prepare_cc01_arms.py --measure-tokens # ② ★ 6水準の注入トークンを凍結
+> #    ⛔ ② を飛ばすと train_lora.py が止まる(錨 x40 = 238,082 と単調性を検算する)
+> finetune/.venv/bin/python finetune/train_lora.py \
+>     --run calibration-curve-01 --recipe R1 --rate 40 --replicate 1
+> finetune/.venv/bin/python finetune/scale_adapter.py \
+>     --run calibration-curve-01 --lambda-step L1 --replicate 1 --rate 40
+> bash finetune/to_gguf.sh cc1L08t1-x40
+> bash scripts/65-manipulation-check.sh cc1L08t1-x40
+> ```
 >
 > **pc-05 で動くのは埋め草の割合 f だけ**(F1 0.50 / F2 0.75 / F3 0.875)であり、
 > **レシピは `R1` に固定**されている(`--recipe` では選べない)。

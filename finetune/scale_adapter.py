@@ -47,8 +47,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from train_lora import (LL01_RECIPE, LL01_TRAIN_ARMS, PC06_RECIPE, RECIPES,
-                        RUN_BASES, recipe_arms)
+from train_lora import (CC01_RATES, CC01_RECIPE, CC01_REPLICATES, CC01_RUN,
+                        CC01_TRAIN_ARMS, LL01_RECIPE, LL01_TRAIN_ARMS,
+                        PC06_RECIPE, RECIPES, RUN_BASES, recipe_arms)
 
 RUN = "positive-control-06"
 
@@ -108,6 +109,25 @@ LL01_LAMBDA_ARMS: dict[tuple[str, int], str] = {
 }
 
 # ---------------------------------------------------------------------------
+# ★ ラン calibration-curve-01 の段とアーム。
+#   preregister「## ラン: calibration-curve-01」→「凍結した設計」が正であり、
+#   **2026-08-17 に、モデルを1本も作る前に凍結された。**
+#
+#   ★ **段は L1(λ = 0.8)の1つだけである。**ll-01 が合格させた唯一の段であり、
+#     本ランが動かすのは λ ではなく**注入率**である。
+#   ⛔ **他の λ を1つも足さない**(停止条件 15)。足せば λ と注入率の2軸を同時に
+#     動かすことになり、較正曲線が「注入率の曲線」でなくなる。
+#
+#   ★ 鍵が3つ(段・複製・注入率)になるのは本ランだけである。pc-06 は段のみ、
+#     ll-01 は段 × 複製だった。**注入率を振るのは pc-01 以来である。**
+# ---------------------------------------------------------------------------
+CC01_STEPS = ("L1",)
+CC01_LAMBDA_ARMS: dict[tuple[str, int, str], str] = {
+    (step, n, rate): f"cc1L{round(LAMBDA_STEPS[step] * 10):02d}t{n}-x{rate}"
+    for step in CC01_STEPS for rate in CC01_RATES for n in CC01_REPLICATES
+}
+
+# ---------------------------------------------------------------------------
 # ★ ラン → 段・アーム・レシピ・関門。**どちらの表も事前登録の凍結表である。**
 #   pc-06 は1本のアダプタから5段を作る(複製なし)。
 #   ll-01 は3本のアダプタそれぞれから4段を作る(複製あり)。
@@ -118,6 +138,7 @@ RUNS: dict[str, dict] = {
         "steps": tuple(LAMBDA_STEPS),          # L0〜L4
         "gate_steps": GATE_STEPS,              # L0(関門)
         "replicated": False,
+        "rated": False,
     },
     "lambda-ladder-01": {
         "recipe": LL01_RECIPE,
@@ -128,6 +149,18 @@ RUNS: dict[str, dict] = {
         #   見込んでいない**ことを示したため。判定は絶対的な合格条件 a・b・c で行う。
         "gate_steps": (),
         "replicated": True,
+        "rated": False,
+    },
+    CC01_RUN: {
+        "recipe": CC01_RECIPE,
+        "steps": CC01_STEPS,                   # ★ L1(λ=0.8)の1段だけ
+        # ★ 関門は置く —— ただし λ の段ではなく**注入率 0% のアーム**に置く。
+        #   preregister「★ `x00` を関門に置く —— 埋め草そのものが害をなしうる」。
+        #   段が1つしか無いので、ここ(段の表)には関門を持たせない。
+        "gate_steps": (),
+        "replicated": True,
+        # ★ 注入率を振る唯一のラン。アーム名の鍵が3つ(段・複製・注入率)になる。
+        "rated": True,
     },
 }
 
@@ -138,18 +171,24 @@ DEFAULT_RUN = RUN
 RELATIVE_TOLERANCE = 1e-6
 
 
-def source_arm(run: str = DEFAULT_RUN, replicate: int | None = None) -> str:
+def source_arm(run: str = DEFAULT_RUN, replicate: int | None = None,
+               rate: str | None = None) -> str:
     """学習済みアダプタのあるアーム。どのランも学習するのは R1 である。
 
     pc-06 は1本(`pc6r1-x40`)。ll-01 は複製ごとに別のアダプタなので凍結表から引く。
     """
+    if RUNS[run].get("rated"):
+        return CC01_TRAIN_ARMS[(rate, replicate)]
     if RUNS[run]["replicated"]:
         return LL01_TRAIN_ARMS[replicate]
     return recipe_arms(run)[RUNS[run]["recipe"]]
 
 
-def target_arm(run: str, step: str, replicate: int | None = None) -> str:
-    """段(と複製)→ アーム名。**凍結表から引く。手で組み立てない。**"""
+def target_arm(run: str, step: str, replicate: int | None = None,
+               rate: str | None = None) -> str:
+    """段(と複製・注入率)→ アーム名。**凍結表から引く。手で組み立てない。**"""
+    if RUNS[run].get("rated"):
+        return CC01_LAMBDA_ARMS[(step, replicate, rate)]
     if RUNS[run]["replicated"]:
         return LL01_LAMBDA_ARMS[(step, replicate)]
     return LAMBDA_ARMS[step]
@@ -177,6 +216,10 @@ def main() -> int:
     ap.add_argument("--replicate", type=int, choices=sorted(LL01_TRAIN_ARMS),
                     help="★ 複製の番号(1/2/3)。**複製で判定するランにだけ要る。**"
                          "アーム名と出所のアダプタを凍結表から引くために使う")
+    ap.add_argument("--rate", choices=CC01_RATES,
+                    help=f"★ 注入率(00/02/05/10/20/40)。**ラン {CC01_RUN} にだけ要る。**"
+                         "⛔ 器はアーム名の末尾2桁を注入率として読むので、"
+                         "ここが違うと別の水準の注入集合で採点される")
     ap.add_argument("--model-dir", type=Path, default=Path("models"))
     args = ap.parse_args()
 
@@ -202,17 +245,33 @@ def main() -> int:
               "このランは1本のアダプタから段を作る(複製で判定しない)。")
         return 1
 
-    lam = LAMBDA_STEPS[step]
-    arm = target_arm(run, step, args.replicate)
-    src_arm = source_arm(run, args.replicate)
+    # --- 0b. 注入率とランの対応(★ 片方だけは受け付けない) ----------------------
+    if args.rate is not None and not spec.get("rated"):
+        print(f"★ --rate はラン {run} のものではない。"
+              "このランは注入率 40% の1水準しか持たない。")
+        return 1
+    if spec.get("rated") and args.rate is None:
+        print(f"★ ラン {run} には --rate(00/02/05/10/20/40)が要る。"
+              "アーム名は凍結表から引く。\n  ★ 注入率がアーム名に出ていないと、"
+              "器が `arm[-2:]` から別の水準の注入集合を引いて採点する。")
+        return 1
 
-    if not arm.endswith("40"):
-        print(f"★ アーム名 {arm} の末尾2桁が 40 でない。"
+    lam = LAMBDA_STEPS[step]
+    arm = target_arm(run, step, args.replicate, args.rate)
+    src_arm = source_arm(run, args.replicate, args.rate)
+
+    # ★ 器は `arm[-2:]` を注入率として読む。**アーム名の末尾が、意図した水準と
+    #   一致していることをここで確かめる。**注入率を振らないランは 40 で固定。
+    expected_rate = args.rate if spec.get("rated") else "40"
+    if arm[-2:] != expected_rate or src_arm[-2:] != expected_rate:
+        print(f"★ アーム名の末尾2桁が {expected_rate} でない"
+              f"(書き出し {arm} / 出所 {src_arm})。"
               "器は `arm[-2:]` を注入率として読むので、注入率が変わってしまう。")
         return 1
 
     print(f"ラン {run} / 段 {step}(λ = {lam})"
-          + (f" / 複製 {args.replicate}" if args.replicate is not None else ""))
+          + (f" / 複製 {args.replicate}" if args.replicate is not None else "")
+          + (f" / 注入率 {int(args.rate)}%" if args.rate is not None else ""))
     print(f"  アダプタ: {src_arm}  →  書き出し: {arm}")
     if step in spec["gate_steps"]:
         print("⚠ この段は**関門**である。preregister「★ L0 の関門」の帯 —— "

@@ -87,6 +87,7 @@ RUN_BASES: dict[str, tuple[str, str]] = {
     "merge-variance-01": SWALLOW_8B,
     "train-determinism-01": SWALLOW_8B,
     "lambda-ladder-01": SWALLOW_8B,
+    "calibration-curve-01": SWALLOW_8B,
 }
 
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
@@ -270,6 +271,80 @@ LL01_TRAIN_ARMS: dict[int, str] = {1: "ll1t1-x40", 2: "ll1t2-x40", 3: "ll1t3-x40
 
 
 # ---------------------------------------------------------------------------
+# ★ ラン calibration-curve-01 —— **注入率を振る唯一のラン**である。
+#   preregister「## ラン: calibration-curve-01」→「凍結した設計」が正であり、
+#   **2026-08-17 に、モデルを1本も作る前に凍結された。**
+#
+#   ★ 水準・注入集合・入れ子は **pc-01 が 2026-08-08 に凍結したものをそのまま使う。**
+#     pc-01 に穴として空いていた3つ(ベース・レシピ・λ)を差し込んだだけである。
+#
+#   ★★ **T の決まり方だけが他のランと違う。**他のランは `T = 注入トークン × E` という
+#     従属量だが、**本ランは T を全アーム共通の固定値に置き、差を埋め草で埋める。**
+#     ⛔ そうしないと「注入率が上がった」のか「長く学習した」のかが区別できない
+#     (pc-01「学習量をアーム間で揃える」)。固定値は **x40 アームが必要とする量**であり、
+#     ll-01 が実測した 238,082 × E=36 = 8,570,952 である。
+#
+#   ⛔ **注入トークン数はアームごとに違う。**従来の `INJECTED_TOKENS_ONCE_BY_RUN`
+#     (ランごとに1つ)では表せない。**6水準ぶんを `manifest-cc01.json` に実測して凍結し、
+#     ここからではなくそこから引く**(prepare_cc01_arms.py --measure-tokens)。
+#     ★ 実測値は**選択ではない** —— 凍結済みのベンチマーク・注入集合・tokenizer revision から
+#     決まる決定論的な量である。記録であって規則ではない。
+#
+#   ★ 検算の錨: **x40 は 238,082 でなければならない**(ll-01・td-01・pc-04 の実測値)。
+#     1つでも既知の値と合えば、残り5つを生んだ計算経路も正しい。
+#
+#   ⛔ **λ は 0.8 の1段だけ。**⛔ **水準を後から足さない。**⛔ **k をアームごとに変えない。**
+# ---------------------------------------------------------------------------
+CC01_RUN = "calibration-curve-01"
+CC01_RECIPE = "R1"
+CC01_RATES: tuple[str, ...] = ("00", "02", "05", "10", "20", "40")
+CC01_REPLICATES: tuple[int, ...] = (1, 2, 3)
+CC01_TOTAL_TOKENS_T = 8_570_952      # = x40 の注入 238,082 × E=36(ll-01 の実測)
+CC01_ANCHOR_RATE = "40"
+CC01_ANCHOR_TOKENS = 238_082         # ★ 検算の錨。pc-04 / td-01 / ll-01 と同じ値
+CC01_TOKENS_MANIFEST = Path("data/injection/manifest-cc01.json")
+
+# 注入率 → pc-01 の凍結表が定めた注入問題数。2026-08-17 に手元で照合済み。
+CC01_N_INJECTED: dict[str, int] = {
+    "00": 0, "02": 94, "05": 237, "10": 474, "20": 948, "40": 1896,
+}
+
+CC01_TRAIN_ARMS: dict[tuple[str, int], str] = {
+    (rate, n): f"cc1t{n}-x{rate}" for rate in CC01_RATES for n in CC01_REPLICATES
+}
+
+
+def cc01_injected_tokens(rate: str,
+                         manifest_path: Path = CC01_TOKENS_MANIFEST) -> int:
+    """そのアームの注入トークン数(1回通し)を**凍結した実測表から**引く。
+
+    ⛔ ここで計算しない。計算するのは prepare_cc01_arms.py --measure-tokens の側で、
+      **学習を1本も始める前に6水準ぶんまとめて確定させる。**
+      走らせながら1つずつ決めると、アームの間で tokenizer の状態が違っても気付けない。
+    """
+    if not manifest_path.is_file():
+        raise SystemExit(
+            f"★ {manifest_path} が無い。注入トークン数が凍結されていない。\n"
+            "  先に `python finetune/prepare_cc01_arms.py --measure-tokens` を走らせること。"
+        )
+    m = json.loads(manifest_path.read_text(encoding="utf-8"))
+    table = (m.get("injected_tokens_once") or {})
+    if rate not in table:
+        raise SystemExit(
+            f"★ {manifest_path} に注入率 {rate}% の実測値が無い(ある水準: "
+            f"{sorted(table)})。--measure-tokens をやり直すこと。"
+        )
+    anchor = table.get(CC01_ANCHOR_RATE)
+    if anchor != CC01_ANCHOR_TOKENS:
+        raise SystemExit(
+            f"★ 錨が合わない —— x{CC01_ANCHOR_RATE} の注入トークンが {anchor} != "
+            f"{CC01_ANCHOR_TOKENS}(pc-04 / td-01 / ll-01 の実測値)。\n"
+            "  ⛔ tokenizer か注入集合が過去ランと違う。走らせてはいけない。"
+        )
+    return int(table[rate])
+
+
+# ---------------------------------------------------------------------------
 # ★ 「同じ設定を複数本回す」ランの凍結表。**このランたちだけが --replicate を取る。**
 #   段が1つでアームが複数なので、`recipe_arms()`(段 → アーム)では名前が分かれない。
 #   ⛔ ここに無いランで --replicate を受けると、凍結表に無いアームが生まれる。
@@ -335,8 +410,11 @@ TD01_ARMS = list(TD01_TRAIN_ARMS.values())
 # ★ lambda-ladder-01 が学習するのも R1 の3本である(λ の段は学習しない。
 #   3本のアダプタそれぞれから scale_adapter.py が作る)。
 LL01_ARMS = list(LL01_TRAIN_ARMS.values())
+# ★ calibration-curve-01 が学習するのは 6水準 × 複製3本 = 18本である
+#   (λ=0.8 の段は学習しない。18本のアダプタそれぞれから scale_adapter.py が作る)。
+CC01_ARMS = list(CC01_TRAIN_ARMS.values())
 LADDER_ARMS = (PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS + MV01_ARMS
-               + TD01_ARMS + LL01_ARMS)
+               + TD01_ARMS + LL01_ARMS + CC01_ARMS)
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -376,6 +454,10 @@ def main() -> int:
                          "学習の何本目か(1/2/3)。"
                          "アーム名を凍結表から引くためだけに使う —— "
                          "★ seed も設定も本数で変わらない(それがどちらのランでも核である)")
+    ap.add_argument("--rate", choices=CC01_RATES,
+                    help="★ calibration-curve-01 の注入率(00/02/05/10/20/40)。"
+                         "★ 本ランだけが注入率を振る —— 他のランは x40 の1水準しか持たない。"
+                         "⛔ 凍結表(6水準)以外は受け付けない(停止条件 13)")
     ap.add_argument("--micro-batch", type=int, choices=MICRO_BATCH_LADDER,
                     help="★ 実効バッチ 16 の内訳。probe_micro_batch.py が決めた値を渡す"
                          "(既定は reports/micro-batch を読む)")
@@ -396,8 +478,23 @@ def main() -> int:
     #     無いまま走らせると3本が同じアーム名になり、**応答キャッシュが前の本の答えを
     #     返して何も測れない。** 逆に他のランで --replicate を受けると、凍結表に無い
     #     アームが生まれる。**どちらも止める。**
-    if args.replicate is not None and args.run not in REPLICATE_TRAIN_ARMS:
-        print(f"★ --replicate はラン {' / '.join(sorted(REPLICATE_TRAIN_ARMS))} のものである"
+    # --- calibration-curve-01 は「複製 × 注入率」の2次元である(★ 唯一のラン)------
+    #   ★ --rate と --run の対応も、--replicate と同じ理由で片方だけは受け付けない。
+    #     アーム名が水準ごとに分かれていなければ、応答キャッシュが別の水準の答えを返す。
+    if args.rate is not None and args.run != CC01_RUN:
+        print(f"★ --rate はラン {CC01_RUN} のものである(指定: {args.run})。"
+              "他のランは注入率 40% の1水準しか持たない。")
+        return 1
+    if args.run == CC01_RUN:
+        if args.rate is None or args.replicate is None:
+            print(f"★ ラン {CC01_RUN} には --rate(00/02/05/10/20/40)と "
+                  "--replicate(1/2/3)の両方が要る。アーム名は凍結表から引く。"
+                  "\n  ★ どちらかを欠くと 18本のアームが名前で分かれず、"
+                  "応答キャッシュが別のアームの答えを返して何も測れない。")
+            return 1
+    elif args.replicate is not None and args.run not in REPLICATE_TRAIN_ARMS:
+        print(f"★ --replicate はラン {' / '.join(sorted(REPLICATE_TRAIN_ARMS))} / "
+              f"{CC01_RUN} のものである"
               f"(指定: {args.run})。他のランは同じ設定を複数回学習しない。")
         return 1
     if args.run in REPLICATE_TRAIN_ARMS and args.replicate is None:
@@ -477,9 +574,20 @@ def main() -> int:
                   f"(指定: {args.recipe})。本ランが動かすのは推論時の LoRA スケール λ で、"
                   "レシピではない。段は finetune/scale_adapter.py が同一のアダプタから作る。")
             return 1
+        # ★ calibration-curve-01 が学習するのも CC01_RECIPE の1本だけである。
+        #   本ランが動かすのは**注入率**であって、レシピでも λ でもない。
+        #   R1 に固定してあるのは、陽性対照を成立させた ll-01 が R1 だからである。
+        if args.run == CC01_RUN and args.recipe != CC01_RECIPE:
+            print(f"★ ラン {CC01_RUN} が学習するのは {CC01_RECIPE} だけである"
+                  f"(指定: {args.recipe})。本ランが動かすのは注入率で、レシピではない。"
+                  "λ=0.8 の段は finetune/scale_adapter.py が同一のアダプタから作る。")
+            return 1
         recipe = RECIPES[args.recipe]
         # ★ td-01 / ll-01 は同じ段を3本回すので、アーム名は段からではなく複製の凍結表から引く。
-        expected_arm = (REPLICATE_TRAIN_ARMS[args.run][args.replicate]
+        #   ★ cc-01 は「複製 × 注入率」の2次元なので、鍵が2つある。
+        expected_arm = (CC01_TRAIN_ARMS[(args.rate, args.replicate)]
+                        if args.run == CC01_RUN
+                        else REPLICATE_TRAIN_ARMS[args.run][args.replicate]
                         if args.run in REPLICATE_TRAIN_ARMS
                         else recipe_arms(args.run)[args.recipe])
         if args.arm and args.arm != expected_arm:
@@ -491,10 +599,27 @@ def main() -> int:
         learning_rate = recipe["lr"]
         lora_rank = recipe["rank"]
         lora_alpha = recipe["alpha"]
-        # T は独立変数ではない。注入トークン数 × E で従属的に決まる。
-        # ★ 注入トークン数は tokenizer 依存なのでランごとに引く(上の表)。
-        injected_tokens_once_expected = INJECTED_TOKENS_ONCE_BY_RUN[args.run]
-        total_tokens_t = injected_tokens_once_expected * exposures_e
+        if args.run == CC01_RUN:
+            # ★★ 本ランだけ T が独立に固定されている。⛔ 注入トークン × E ではない。
+            #   preregister「## ラン: calibration-curve-01」→「凍結した設計」——
+            #   **T を全アーム共通に固定し、差を埋め草で埋める。**そうしないと
+            #   「注入率が上がった」のか「長く学習した」のかが区別できない。
+            injected_tokens_once_expected = cc01_injected_tokens(args.rate)
+            total_tokens_t = CC01_TOTAL_TOKENS_T
+            # ★ 注入問題数も凍結表と突き合わせる(停止条件 3)。
+            #   ⛔ アーム名の末尾2桁から注入集合を引く経路は pc-01 以来 眠っている。
+            n_ids = len([l for l in (args.injection_dir / f"{expected_arm}.ids")
+                         .read_text(encoding="utf-8").splitlines() if l.strip()])
+            if n_ids != CC01_N_INJECTED[args.rate]:
+                print(f"★ {expected_arm} の注入問題数が {n_ids} != "
+                      f"{CC01_N_INJECTED[args.rate]}(pc-01 の凍結表)。"
+                      "注入集合の複製を疑う。")
+                return 1
+        else:
+            # T は独立変数ではない。注入トークン数 × E で従属的に決まる。
+            # ★ 注入トークン数は tokenizer 依存なのでランごとに引く(上の表)。
+            injected_tokens_once_expected = INJECTED_TOKENS_ONCE_BY_RUN[args.run]
+            total_tokens_t = injected_tokens_once_expected * exposures_e
         run_name = args.run
     else:
         if not args.arm:

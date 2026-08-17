@@ -21,6 +21,10 @@ require_ollama
 require_env_tag
 require_prompt_format
 
+#   ★ 0% アームのプラセボ群(calibration-curve-01・2026-08-17 追加):
+#     CONTAMLAB_PLACEBO_IDS=data/injection/pc-x40.ids bash scripts/65-manipulation-check.sh cc1L08t1-x00
+#     ⛔ **報告するだけで判定には入らない。**偽陽性を裁くのは 70 の判定項目 A である。
+
 PER_GROUP="${CONTAMLAB_PER_GROUP:-400}"   # 0 で全件。既定は1アーム約800コール(≒5分)
 ARMS=("$@")
 [[ ${#ARMS[@]} -gt 0 ]] || ARMS=(pc-x00 pc-x02 pc-x05 pc-x10 pc-x20 pc-x40)
@@ -31,6 +35,7 @@ echo "  キャッシュ        : $(cache_path)"
 
 CONTAMLAB_ARMS="${ARMS[*]}" \
 CONTAMLAB_PER_GROUP="$PER_GROUP" \
+CONTAMLAB_PLACEBO_IDS="${CONTAMLAB_PLACEBO_IDS:-}" \
 CONTAMLAB_CACHE="$(cache_path)" \
 CONTAMLAB_FORMAT="$(prompt_format)" \
 CONTAMLAB_BENCHMARK="$BENCHMARK" \
@@ -85,10 +90,30 @@ for arm in arms:
     print(f"      非注入群 n={n_o:4d}  正解率 {acc_o:.4f}  解釈不能 {unp_o:.2%}")
 
     if not injected:
-        # pc-x00 / pcbase-x00 には注入群が無い。ここで見るのは
+        # pc-x00 / pcbase-x00 / cc1*-x00 には注入群が無い。ここで見るのは
         # 「fine-tune がベースを壊していないか」(pc-01)、
         # 「そもそもこのベースが書式 C で使えるのか」(pc-02 の第0段)。
         print(f"      注入群   —— 無し(陰性対照)")
+        # ★ プラセボ群(calibration-curve-01 の 0% アーム用・2026-08-17 追加)
+        #   preregister「## ラン: calibration-curve-01」→「判定の規則 ①」——
+        #   **x40 の注入集合を「注入されたはずの群」として同じ計算を通す。**
+        #   ⛔ **これは判定ではない。報告するだけである。**
+        #     合格条件 a(差 ≥ 10pt)を 0% アームに当てるのは意味を成さない
+        #     (0% は差が 0 であることが正しい姿である)。偽陽性を裁くのは
+        #     70-positive-control.sh の判定項目 A(x00 が detected = false)であって、
+        #     ここではない。★ 下の failures には**1行も足さない。**
+        placebo_path = os.environ.get("CONTAMLAB_PLACEBO_IDS", "")
+        if placebo_path and Path(placebo_path).exists():
+            placebo_ids = set(Path(placebo_path).read_text(encoding="utf-8").split())
+            placebo = [by_id[i] for i in sorted(placebo_ids) if i in by_id]
+            if per_group:
+                placebo = take_deterministic(placebo, min(per_group, len(placebo)))
+            if placebo:
+                acc_p, unp_p, n_p = accuracy(model, placebo)
+                print(f"      プラセボ n={n_p:4d}  正解率 {acc_p:.4f}  解釈不能 {unp_p:.2%}"
+                      f"   ({Path(placebo_path).name})")
+                print(f"      差       {acc_p - acc_o:+.4f}  "
+                      f"({(acc_p - acc_o)*100:+.2f} pt)  ★ 報告のみ・判定に入らない")
         if acc_o < 0.30:
             failures.append(f"{arm}: 素の正解率 {acc_o:.4f} < 0.30。fine-tune がベースを壊した。")
         # ★ pc-02 の第0段。閾値 5% は pc-01「解釈不能率が 5% 超のアームは外す」の移植で、

@@ -5407,13 +5407,28 @@ C. 区別できている    —— Cochran の Q が有意(アーム間で低下
 
 ### 着手手順(★ 上から順。飛ばさない)
 
-1. **実装**(**課金ゼロ**。テスト全件通過と `contamlab verify` を確認してコミット)
-   - `finetune/prepare_cc01_arms.py` —— 6水準の学習コーパスを組む。**各アームの注入トークンを実測し、
-     埋め草を T − (注入トークン × 36) で埋める。**★ **実測値を凍結表として記録する**
-   - `train_lora.py` の凍結表に `calibration-curve-01` の行を足す
-     (`RUN_BASES` = Swallow-8B / `ARM_PREFIXES` = `cc1` / `TOTAL_TOKENS_T` = **8,570,952**)。
-     ⛔ ★ **注入トークンは従来「ランごとに1つ」だったが、本ランは**アームごとに違う**。表の形を変える必要がある
-   - ⛔ **`contamlab/` 配下・`harness.py`・`stats/`・`runner.py` の採点規則には触れない**
+1. ~~**実装**(**課金ゼロ**。テスト全件通過と `contamlab verify` を確認してコミット)~~
+   → ✅ **2026-08-17 完了。規則は1つも変えていない。課金ゼロ。**
+   **テスト 461 件通過 / `contamlab verify` 3項目とも通過。**
+   `contamlab/` 配下は1行も触っていない。**モデルは1本も作っておらず、GPU も借りていない。**
+   - ✅ `finetune/prepare_cc01_arms.py` —— **36本(学習 18 + λ=0.8 の 18)を pc-01 から複製し、
+     sha256・件数・入れ子を照合してから書き出す。**★ **2026-08-17 に手元で実行済み** ——
+     6水準とも pc-01 の manifest と一致し、`x02 ⊂ x05 ⊂ x10 ⊂ x20 ⊂ x40` が成立した
+   - ✅ **`--measure-tokens`** —— 6水準の注入トークン数を**学習の前にまとめて実測**して凍結する。
+     ★ **錨(`x40` = 238,082)と単調性と「T に収まるか」を検算し、外れたら書き出さずに止める。**
+     ⛔ **tokenizer が要るのでインスタンス上で走らせる**(手元では未実行)
+   - ✅ `train_lora.py` の凍結表に `calibration-curve-01` を足した
+     (`RUN_BASES` = Swallow-8B / `CC01_TOTAL_TOKENS_T` = **8,570,952** / `CC01_N_INJECTED`)。
+     ★ **注入トークンは従来「ランごとに1つ」だったので、本ラン用に `manifest-cc01.json` から
+     アームごとに引く経路を足した。**⛔ **既存ランの経路は1行も変えていない**
+   - ✅ `scale_adapter.py` に λ=0.8 の 18本を足した。★ **アーム名の末尾2桁が意図した水準と
+     一致することを、書き出しと出所の両方で検査する**(従来は `40` 決め打ちだった)
+   - ✅ `scripts/65-manipulation-check.sh` に **`x00` のプラセボ群**を足した
+     (`CONTAMLAB_PLACEBO_IDS`)。⛔ ★ **報告するだけで判定には入らない** ——
+     合格条件 a(差 ≥ 10pt)を 0% アームに当てるのは意味を成さない(0% は差が 0 であることが
+     正しい姿である)。**偽陽性を裁くのは 70 の判定項目 A である**
+   - ✅ `tests/test_cc01_arms.py`(26 件)—— **停止条件 3 と 15 を機械が守れるようにした**
+   - ⛔ **`contamlab/` 配下・`harness.py`・`stats/`・`runner.py` の採点規則には触れていない**
 2. **借りる** → ★ **段 0.5(`05-arm-cost-watchdog.sh`)を最初に立て、鼓動を確認する**
 3. `10-bootstrap.sh` → `20-rebuild-benchmark.sh` → `30-record-environment.sh` → `35-select-format.sh`
 4. **第0段**(帯 [0.562, 0.658] / 解釈不能率 ≤ 1.6%)→ 外れたら停止
@@ -5430,8 +5445,11 @@ bash   scripts/10-bootstrap.sh
 bash   scripts/20-rebuild-benchmark.sh
 CONTAMLAB_ENV_TAG=lambda-a100-cc01-<日付> bash scripts/30-record-environment.sh
 bash   scripts/35-select-format.sh
-python finetune/prepare_cc01_arms.py
+python finetune/prepare_cc01_arms.py                  # ① 36本を複製(pc-01 と sha256 一致)
+python finetune/prepare_cc01_arms.py --measure-tokens # ② ★ 6水準の注入トークンを凍結
+#    ⛔ ② を飛ばすと train_lora.py が止まる(錨 x40 = 238,082 と単調性を検算する)
 # ★ アームごとに: 学習3本 → scale(λ=0.8)→ 変換 → 65-manipulation-check.sh → 70-positive-control.sh
+#    x00 のプラセボ群: CONTAMLAB_PLACEBO_IDS=data/injection/pc-x40.ids で報告のみ
 ```
 
 ---
