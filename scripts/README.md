@@ -14,6 +14,7 @@
 | | スクリプト | 場所 | すること |
 |---|---|---|---|
 | 0 | `00-launch-ec2.ps1` | 手元(Windows) | GPU インスタンスを1台起こす。**既定は表示のみ**。**AWS を使う場合のみ**(下記) |
+| ★ 0.5 | `05-arm-cost-watchdog.sh` | **インスタンス内** | **費用ウォッチドッグを常駐させる。**ハード期限で自分自身を terminate する(下記) |
 | 1 | `10-bootstrap.sh` | インスタンス内 | Ollama 導入・決定性のための設定・GGUF 取得・`verify` |
 | 2 | `20-rebuild-benchmark.sh` | インスタンス内 | JMMLU を **pin した SHA** から作り直し、manifest と照合 |
 | 3 | `30-record-environment.sh` | インスタンス内 | 版と GGUF の SHA256 を記録。**環境タグを確定** |
@@ -38,6 +39,72 @@
 > 段 5 以降は `--prompt-format "$(prompt_format)"` を自動で渡す。**手で書式を指定しない。**
 > 段ごとに違う書式で測ると、キャッシュキーが分かれて呼び出しが無駄になるだけでなく、
 > **正解率と ψ が段をまたいで比較できなくなる。**
+
+## ★ 段 0.5: 費用ウォッチドッグ(2026-08-17 追加)
+
+ラン `lambda-ladder-01` は**停止条件8(費用 > $20)に違反した。総額 $47.82・超過 $27.82。**
+測定は 15:55Z に終わっていた(有効 3.95h ≒ $7.86)のに、**誰も使っていない GPU が
+20.07 時間 ≒ $39.96 ぶん回り続けた。**原因は仕掛けの**置き場所**である ——
+「期限を過ぎたら terminate する」ループを**手元の Windows で**回していたので、
+**PC がスリープした瞬間に見張りごと止まった**(ログは 13:41Z で途切れている)。
+
+**したがって設計要件はただ1つ、「手元の PC が死んでも動き続ける」である。**
+
+```bash
+# ★ 借りた直後・bootstrap より前。インスタンスの上で(手元ではない)
+bash scripts/05-arm-cost-watchdog.sh \
+    --name contamlab-ll02 --price 1.99 --budget 20 --hard 18
+
+python3 scripts/cost_watchdog.py status    # 生きているか(鼓動で判定)
+python3 scripts/cost_watchdog.py disarm    # ★ 撤収時、手で terminate する前に
+```
+
+段 0.5 が 10-bootstrap.sh より前なのは、**bootstrap 自体が数十分の GPU 時間を使い、
+しかも止まることがある**からである。見張りは最初に立てる。
+
+> [!warning] ⛔ `sudo shutdown -h +NNN` では課金は止まらない(Lambda)
+> preregister の教訓の欄には shutdown の予約とも書いてあるが、**Lambda では効かない。**
+> 2026-08-17 に実 API で確かめた:
+>
+> | 叩いた先 | 応答 |
+> |---|---|
+> | `POST /instance-operations/stop` | 404 `global/not-found`(**エンドポイントが無い**) |
+> | `POST /instance-operations/suspend` | 404 `global/not-found`(**同上**) |
+> | `POST /instance-operations/restart` | 404 `global/object-does-not-exist` |
+> | `POST /instance-operations/terminate` | 404 `global/object-does-not-exist` |
+>
+> 存在するエンドポイントは「そんな id は無い」と答え、存在しないものは「そんな
+> エンドポイントは無い」と答える。**`stop`/`suspend` は後者** —— Lambda に「停止」状態は
+> 無く、インスタンスは**存在するだけで課金される。**OS を halt しても一覧に残る。
+> ⛔ **しかも halt すると見張り自身も死に、terminate の再試行ができなくなる。悪化する。**
+>
+> → **既定では OS を落とさない。terminate API を、消えたことを確認するまで再試行する。**
+
+### 事故が再発しないための装置
+
+| 装置 | 何を防ぐか |
+|---|---|
+| **Linux 以外では `arm` を拒む** | ⛔ 手元の Windows で回す(事故そのもの)。`--allow-remote` で明示的に破るしかない |
+| **期限は絶対時刻で凍結** | プロセスや OS を上げ直すたびに寿命が伸びる、を防ぐ |
+| **`systemd` で `Restart=always` + `enable`** | 落ちても上がる。再起動しても復活する |
+| **鼓動が出るまで待って、出なければ**段 0.5 **が失敗する** | ⛔ 「立てたつもりで死んでいた」に気付けない、を防ぐ |
+| **`status` が鼓動の途絶を異常と判定** | 事故当時、途切れたログを誰も見ていなかった |
+| **一覧から消えるまで成功と呼ばない** | terminate が受理されただけで安心する、を防ぐ |
+| **名前が 0 台/複数に当たったら止まる** | ⛔ 関係ないインスタンスを巻き添えにする |
+| **`selftest`** | ⛔ **仕掛けを一度も試さない**(事故の本質)。課金ゼロ・terminate ゼロで発火経路を通す |
+
+> [!important] ★ API キーはインスタンスの上に置くことになる
+> 自分自身を terminate するには鍵が要る。Lambda のキーはアカウント全体に効くので、
+> **ランごとに発行し、撤収時に失効させる**こと(`.env` の運用と同じ)。
+> `05-arm-cost-watchdog.sh` は `.env` を `chmod 600` し、systemd には
+> `EnvironmentFile=` で渡す(ユニットファイルに直接書くと `/etc/systemd/system` は
+> 世界可読なので漏れる)。
+
+> [!warning] ⛔ `urllib` の既定 User-Agent は Cloudflare に 403 で弾かれる
+> `error code: 1010`。**これは「API キーが失効した」ようにしか見えない。**
+> `cost_watchdog.py` は UA を明示する。キーを再発行しに走る前にここを疑うこと。
+
+検査は `tests/test_cost_watchdog.py`(27 件・ネットワークに出ない)。
 
 ## ⚠️ AWS の GPU クォータは**否認された**(2026-08-06)
 
@@ -130,6 +197,11 @@ ssh -i <秘密鍵のパス> ubuntu@<IP>
 
 ```bash
 git clone contamlab.bundle contamlab && cd contamlab
+
+# ★ 先に見張りを立てる(2026-08-17 追加。bootstrap も GPU 時間を使う)
+#   .env に LAMBDA_API_KEY を置いてから。<name> は Lambda のコンソールで付けた名前
+bash scripts/05-arm-cost-watchdog.sh --name <name> --price 1.99 --budget 20 --hard 18
+
 bash scripts/10-bootstrap.sh
 bash scripts/20-rebuild-benchmark.sh
 
@@ -384,5 +456,13 @@ scp -i <鍵> -r ubuntu@<IP>:contamlab/data/cache ./data/cache-ec2
 
 応答キャッシュを捨てると、次に同じ問いを投げるのに GPU 時間をもう一度払うことになる。
 **追記専用なので消さない**(`program.md` の禁止事項)。
+
+★ **回収したら、terminate する前にウォッチドッグを解除する**(2026-08-17 追加)。
+解除せずに手で terminate しても実害は無い(見張りは「対象が一覧に消えた」ことを
+検出して自分から終わる)が、ログに事故と紛らわしい発火記録が残る。
+
+```bash
+python3 scripts/cost_watchdog.py disarm    # インスタンス内
+```
 
 **S3 には置かない。** 非公開シードと HOLDOUT はインスタンス内に閉じる。
