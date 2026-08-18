@@ -32,10 +32,19 @@ say() { echo "=== $* $(ts)"; }
 # ★ 終わったら(正常でも異常でも)ハード期限を手前に寄せる。
 #   ⛔ 期限を**後ろへ動かすことはしない**(緩和になる)。手元が死んでいても、
 #   成果物を回収する猶予を残しつつ、空回りを 3h で止める。
+GRACE_HOURS=8            # ★ 成果物を回収する猶予。8h × $1.99 = $15.92
 grace() {
-  say "[grace] ハード期限を現在 +3h に寄せ直す(★ 厳しい側にしか動かさない)"
+  local cur_epoch new_epoch
+  cur_epoch=$(python3 -c "import json;print(int(json.load(open('reports/cost-watchdog.json'))['deadline_epoch']))" 2>/dev/null || echo 0)
+  new_epoch=$(( $(date -u +%s) + GRACE_HOURS * 3600 ))
+  # ★ 期限は**手前にしか動かさない。**後ろへ動かせば規則の緩和になる。
+  if [ "$cur_epoch" -gt 0 ] && [ "$new_epoch" -ge "$cur_epoch" ]; then
+    say "[grace] いまの期限のほうが早い。1秒も後ろへ動かさない"
+    return 0
+  fi
+  say "[grace] ハード期限を現在 +${GRACE_HOURS}h に寄せ直す(★ 厳しい側にしか動かさない)"
   python3 scripts/cost_watchdog.py arm --name contamlab-cc01 \
-      --price-usd-per-hour 1.99 --hard-usd 5.97 --budget-usd 95 \
+      --price-usd-per-hour 1.99 --hard-usd 15.92 --budget-usd 95 \
       --started-at-utc "$(date -u +%FT%TZ)" --interval 300 || return 0
   sudo systemctl restart contamlab-watchdog || true
   python3 scripts/cost_watchdog.py status || true
