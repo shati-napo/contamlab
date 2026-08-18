@@ -91,6 +91,23 @@ check_arms() {  # $1=out-file $2..=arms
 }
 
 say "[START] calibration-curve-01 のオーケストレータ"
+
+# ★ 二重起動を機械が拒む。同じアームを2本同時に学習すると、どちらが残ったのか
+#   分からなくなる(複製の同一性が壊れる)。
+exec 9>"reports/.cc01-orchestrate.lock"
+if ! flock -n 9; then
+  say "[LOCK] 既にオーケストレータが走っている。何もしない"
+  exit 0
+fi
+
+# ★ 手元のエージェントが先に起動していた学習があれば、それが終わるまで待つ。
+#   ⛔ 二重に学習を始めない(冪等の判定は train.json の有無で行うため、
+#      走っている最中は「無い」に見える)。
+while pgrep -f "finetune/train_lora.py" > /dev/null; do
+  say "[WAIT] 先に走っている学習の終了を待つ(120s)"
+  sleep 120
+done
+
 for rate in $RATES; do
   say "[RATE] x${rate} に入る"
 
