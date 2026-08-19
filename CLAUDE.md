@@ -10,11 +10,24 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 2. **この文書の「絶対禁止」** — 破ると研究資産が回復不能になる
 3. [program.md](program.md) の「変えてよいもの / いけないもの」と「前回までの学び」
 4. [preregister.md](preregister.md) の「測定条件」と「変更履歴」
-5. [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) — **直近のランは 2026-08-07 に完走した。**
+5. [docs/positive-control-arc.md](docs/positive-control-arc.md) — 陽性対照を自作するまでの 11 ラン・約 $103 の要約
+6. [docs/run-jmmlu-shuffle-03.md](docs/run-jmmlu-shuffle-03.md) — **HOLDOUT を消費したラン(2026-08-07)。**
    結論・何が言えて何が言えないか・**次に決めること**(§6)がまとまっている
-6. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — その前のラン(中止)。経緯の参照用
+7. [docs/run-jmmlu-shuffle-02.md](docs/run-jmmlu-shuffle-02.md) — その前のラン(中止)。経緯の参照用
 
-> [!note] 現在地(2026-08-08)
+> [!note] 現在地(2026-08-19)
+> ▶ **[docs/NEXT.md](docs/NEXT.md) 冒頭の「次のセッションはここから着手する」を読む。**
+> **そのブロックだけで着手できる**ように書いてある(以降 1,300 行は必要になってから読む)。
+> - ✅ **陽性対照の自作は 2026-08-16 の `lambda-ladder-01` L1 で成立済み**(a・b・c すべて k=3 で合格)
+> - 🔴 **較正曲線は `calibration-curve-01`(2026-08-18)で停止**。1点も引けていない
+> - ⬜ ★ **`scripts/70-positive-control.sh` は 12 ラン通じて一度も走っていない。**
+>   `drop` / `p_value` / `adjusted_lcb` は**実モデルに対して1つも計算されたことがない**
+>
+> ★ **次の着手は $0・GPU 不要の作業1〜3**(`power.py` の外部照合 / README と主張範囲の是正 /
+> FakeModel での in-silico 較正)。**規則の選択を含まないので判断を待たずに着手してよい。**
+> ⛔ **GPU を借りるランは事前登録が要る。ユーザーの決定を待つ。**
+
+> [!note] 旧・現在地(2026-08-08・履歴として残す)
 > **公開済み**(PUBLIC)。次は **[docs/NEXT.md](docs/NEXT.md) のステップ1** —— Nejumi の
 > 問題ごとの正誤が取れるかを **1 時間で**確かめる。**測定はしない。**
 
