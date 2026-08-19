@@ -28,7 +28,14 @@ $ contamlab power --n 100 --discordant-rate 0.2
 検出可能な最小: 11.00 ポイント
 ```
 
-**100問では 11 ポイント未満の汚染は見えない。** 5ポイントを見るには 493 問要る。
+**100問では ~~11~~ ポイント未満の汚染は見えない。** 5ポイントを見るには ~~493~~ 問要る。
+
+> [!warning] ⚠️ **この2つの数字は楽観側にずれている(2026-08-19 の外部照合で判明)**
+> `power --n 100` が返す 11.00 pt / 493 問は、McNemar の**正規近似**検定の検出力である。
+> だが contamlab が判定に使うのは**厳密条件付き**検定で、そちらは保守的なぶん検出力が落ちる。
+> 実際に測り直すと **11.50 pt / 527 問**であった(厳密列挙・乱数なし)。
+> **正しい向きは「もっと問題が要る」**であって、主張(小標本では汚染は見えない)は弱まらない。
+> 詳細と再現手順: **[docs/power-verify-2026-08-19.md](docs/power-verify-2026-08-19.md)**
 
 にもかかわらず、多くの汚染研究は 100〜200 問で実験し、有意差が出なければ
 「汚染は検出されなかった」と結論している。**それは「汚染がない」ではなく
@@ -206,13 +213,17 @@ contamlab/
   stats/
     distributions.py  chi2 / 二項 / Clopper-Pearson 厳密区間
     mcnemar.py        対応のある二値データの厳密検定
-    power.py          Connor (1987) の標本サイズ式
+    power.py          Connor (1987) の標本サイズ式(⚠️ 欠陥 P-1 あり → docs/power-verify-2026-08-19.md)
     multiplicity.py   Holm / BH / E[max]-σ 割引
     heterogeneity.py  Cochran の Q(差の差)
 
 program.md      実験指示書(人間が育てる)
 preregister.md  事前確約(結果を見る前に書く)
 docs/           ランごとの報告
+  NEXT.md               ★ 再開点。作業はここから読む
+  positive-control-arc.md  陽性対照を自作するまでの 11 ラン(約 $103)
+  power-verify-2026-08-19.md  power.py の外部照合と、そこで見つかった欠陥 P-1
+tools/          検証用スクリプト(⛔ contamlab/stats/ は編集禁止なので、当てる側はここに置く)
 ```
 
 ### これまでのラン
@@ -221,6 +232,8 @@ docs/           ランごとの報告
 |---|---|
 | [`jmmlu-shuffle-02`](docs/run-jmmlu-shuffle-02.md) | **中止(2026-08-06)。** 参加条件を満たすモデルが 2 本揃わず、検査を実行していない。**汚染の有無には答えていない。** HOLDOUT 1,922 問は未使用 |
 | [`jmmlu-shuffle-03`](docs/run-jmmlu-shuffle-03.md) | **完走(2026-08-07)。汚染ありとは結論しない。** 書式 C・n=1,097・`shuffle_choices`(K=1)。**検出できる下限は 4.2pt(swallow)/ 5.1pt(13b)で、それを超える低下は無かった。**「汚染なし」ではない。**HOLDOUT は開封・消費済み** |
+| [**陽性対照アーク**(11 ラン)](docs/positive-control-arc.md) | **2026-08-08〜17・約 $103。** JMMLU 1,896 問を LoRA で注入し、推論時に λ=0.8 に絞ることで、汚染の効果(差 +13.08 pt)を保ったまま指示追従の破壊を消した。**合格条件 a・b・c を同時に満たす陽性対照が 1 本手に入った。** ⛔ ただし**手に入ったのは「検出器が反応すべき既知の陽性」であって、検出器を当てた結果ではない。**`70-positive-control.sh` は 11 ラン全体で**1 度も走らせていない。**HOLDOUT も開けていない |
+| `calibration-curve-01` | **停止(2026-08-18)・$28。** 汚染率を振って較正曲線を引こうとしたが、総トークンを揃えるための埋め草(日本語 Wikipedia)を 100% 詰めたアームで**解釈不能率 64.75%**。事前登録の異常検知に該当し、残り 5 アームは学習していない。**曲線は 1 点も引けていない**(一次記録は [preregister.md](preregister.md)) |
 
 02 が中止で終わったのは、モデルが「正しい選択肢の記号だけを答えてください」という
 **出力書式**に乗らなかったからである。03 は書式を選び直した。これは
@@ -235,17 +248,20 @@ docs/           ランごとの報告
 > [!warning] ⚠️ **ただし、外部の公表値に固定できているのは一部だけである(2026-08-08 に明記)**
 > | 固定先 | モジュール |
 > |---|---|
-> | ✅ **外部の公表値** | `distributions.py`(カイ二乗分布表・Clopper-Pearson の公表値・Wilson 区間・標準正規分位点)、`multiplicity.benjamini_hochberg`(Benjamini & Hochberg 1995 の例) |
+> | ✅ **外部の公表値** | `distributions.py`(カイ二乗分布表・Clopper-Pearson の公表値・Wilson 区間・標準正規分位点)、`multiplicity.benjamini_hochberg`(Benjamini & Hochberg 1995 の例)、**`power.py`(2026-08-19 に R パッケージ MESS と照合)** |
 > | ⚠️ **自作の手計算値**(検証可能だが外部出典なし) | `distributions.binomial_sf*`、`multiplicity.holm`、`mcnemar.*` |
-> | ❌ **外部照合なし** | **`power.py`(Connor 1987 の標本サイズ式)**、`heterogeneity.cochran_q` |
+> | ❌ **外部照合なし** | `heterogeneity.cochran_q`、`multiplicity.expected_max_of_k` |
 >
-> **`power.py` に外部照合が無いのは痛い。** 上に掲げた「493 問」「11 ポイント」は
-> **同じ実装から出た自己整合値**であり、`min_detectable_effect` と `required_n` の
-> 整合テストは**同じ式を両方向に使っているだけ**なので、**式の転記ミスがあっても全テストが通る。**
-> また `expected_max_of_k` の固定先は Bailey & López de Prado の公表値ではなく、
-> **著者自身の別プロジェクトの表**である。
-> **本リポジトリの看板の数字はこの2モジュールに依存している。**
-> R / statsmodels 等の独立実装との突き合わせは**まだ行っていない。**
+> **2026-08-19 に `power.py` の外部照合を実施した(→ [docs/power-verify-2026-08-19.md](docs/power-verify-2026-08-19.md))。**
+> 疑っていた**式の転記ミスは否定された** —— R パッケージ MESS(Connor 1987 の正規近似)の
+> 公表出力と小数第4位まで一致し、128 ケースの格子照合でも差はゼロだった。
+> **代わりに別の欠陥が出た**: `power.py` が検出力を計算しているのは**正規近似**検定だが、
+> `mcnemar.py` が判定に使うのは**厳密条件付き**検定であり、**両者を突き合わせるテストが1本も無い。**
+> 看板の設定で検出力 0.80 のはずが**実際は 0.774**(モンテカルロ 20,000 試行と厳密列挙が一致)。
+> ⛔ `contamlab/stats/` は編集禁止領域なので**直さず、欠陥として記録した。**
+>
+> `expected_max_of_k` の固定先は依然として Bailey & López de Prado の公表値ではなく、
+> **著者自身の別プロジェクトの表**である。`heterogeneity.cochran_q` の外部照合も**まだ無い。**
 
 ---
 
