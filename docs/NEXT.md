@@ -1,4 +1,4 @@
-# NEXT — 次の一手(2026-08-20 更新・作業4 = B案 の事前登録と実装が完了 / 次は GPU)
+# NEXT — 次の一手(2026-08-20 更新・作業4 = B案 を GPU で実行中)
 
 > このファイルが**再開点**。ここから読み、終わったらここを更新する。
 > 一次情報はリポジトリ、Obsidian の [[contamlab]] はその索引。数字が食い違ったらこちらが正。
@@ -17,6 +17,36 @@
 
 > ★ **このブロックだけで着手できるように書いてある。**下の「いまの状態」以降は 1,300 行あるので、
 > **必要になってから読む。**⛔ 数字が食い違ったら [preregister.md](../preregister.md) が正。
+
+### 🔴 いま GPU が走っている(2026-08-20 13:00Z〜)—— 復帰したら**まずここを読む**
+
+| 項目 | 値 |
+|---|---|
+| ホスト | `ubuntu@129.146.104.106`(鍵 `~/.ssh/contamlab-pc06`) |
+| instance id | `f9a16b8b47a14244b51cd4b953741d29`(★ **名前が無い**ので Web の Terminate は押せない。API で落とす) |
+| env-tag | `lambda-a100-df1-20260820` |
+| ハード期限 | **2026-08-20T21:37:41Z ≒ $17.90**(停止条件の $20 の内側)。インスタンス上のウォッチドッグが自分で terminate する |
+| 進行役 | `scripts/df1-orchestrate.sh`(ホスト上で nohup。ログ `reports/df1-orchestrate.log`) |
+
+```powershell
+# いまどの段にいるか(★ 課金にも判定にも触らない。読むだけ)
+python scripts/df1_closeout.py status
+```
+
+**復帰したら、まず `status` を撃つ。**そのうえで:
+
+| status の出方 | すること |
+|---|---|
+| `★ 正常終了` | `python scripts/df1_closeout.py close --terminate` → 記録 → 必要なら `--shutdown` |
+| まだ走っている | 待つ。⛔ **走っているスクリプトを scp で書き換えない**(bash が読み込み中に壊れる) |
+| `STOPPED` が出ている | ログで落ちた関門を読む。⛔ **terminate しない** —— `models/` の LoRA は1本1時間。オーケストレータは冪等なので、直して再起動すれば続きから進む |
+
+⛔ **回収より先に terminate しない。**`reports/` と `data/cache/` は `.gitignore` 対象で、
+**ホスト上のファイルが原本**である。`close` はこの順序を機械的に守る(テスト16本)。
+
+★ **手元の PC は自動スリープを切ってある**(AC のスリープ/休止 → 無効)。
+元の値(15分 / 180分)は `reports/power-restore.json` にあり、`close` が**正常でも異常でも**戻す。
+⛔ 手作業で撤収した場合は `powercfg /change standby-timeout-ac 15` を自分で戻すこと。
 
 ### 現在地(3行)
 
