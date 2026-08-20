@@ -28,11 +28,12 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 >   **検出力の数字は常に楽観側**(0.80 のはずが実際 0.774 / 493問 → 527問)。
 >   ⛔ 編集禁止領域なので**直していない** → [docs/power-verify-2026-08-19.md](docs/power-verify-2026-08-19.md)
 >
-> ★ **次の着手は作業4 = B案。**合格実績のある x40(λ=0.8・埋め草ゼロ)を1点だけ作り直し、
-> `70-positive-control.sh` を**初めて通す**($14)。**2026-08-19 にユーザーが決定済み・
-> 実行は 2026-08-20 に回した。**⛔ **案の再検討はしない。**
-> ⛔ **着手前に事前登録を書く。**Lambda の API キーは失効済みなので**発行から**。
-> 手順は [docs/NEXT.md](docs/NEXT.md) の決定ブロックが正。
+> ★ **作業4 = B案 の事前登録は 2026-08-20 に完了**(ラン `detector-firstlight-01`・commit `7cc802a` で凍結)。
+> ⛔ **結果は1文字も書いていない。GPU は借りていない。**⛔ **規則の再検討はしない。**
+> ★ **次の着手は「実装」**(課金ゼロ)—— `prepare_df1_arms.py` / **`scripts/72-detector-firstlight.sh`(新設)** /
+> `tools/split_drop_by_injection.py` / `df1-orchestrate.sh`。
+> ⛔ **`contamlab/` 配下と `scripts/70-positive-control.sh` は1行も触らない。**
+> その後 Lambda の API キーを**新規発行**して借りる。手順は [docs/NEXT.md](docs/NEXT.md) の決定ブロックが正。
 
 > [!note] 旧・現在地(2026-08-08・履歴として残す)
 > **公開済み**(PUBLIC)。次は **[docs/NEXT.md](docs/NEXT.md) のステップ1** —— Nejumi の
