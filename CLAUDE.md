@@ -28,12 +28,12 @@ LLM ベンチマークの**汚染**を、検定・信頼区間・検出力・多
 >   **検出力の数字は常に楽観側**(0.80 のはずが実際 0.774 / 493問 → 527問)。
 >   ⛔ 編集禁止領域なので**直していない** → [docs/power-verify-2026-08-19.md](docs/power-verify-2026-08-19.md)
 >
-> ★ **作業4 = B案 の事前登録は 2026-08-20 に完了**(ラン `detector-firstlight-01`・commit `7cc802a` で凍結)。
-> ⛔ **結果は1文字も書いていない。GPU は借りていない。**⛔ **規則の再検討はしない。**
-> ★ **次の着手は「実装」**(課金ゼロ)—— `prepare_df1_arms.py` / **`scripts/72-detector-firstlight.sh`(新設)** /
-> `tools/split_drop_by_injection.py` / `df1-orchestrate.sh`。
-> ⛔ **`contamlab/` 配下と `scripts/70-positive-control.sh` は1行も触らない。**
-> その後 Lambda の API キーを**新規発行**して借りる。手順は [docs/NEXT.md](docs/NEXT.md) の決定ブロックが正。
+> ★ **作業4 = B案 は事前登録(commit `7cc802a`)と実装(commit `9722102`)まで 2026-08-20 に完了**
+> (ラン `detector-firstlight-01`)。**テスト 496 件通過 / `contamlab verify` 通過。**
+> ⛔ **結果は1文字も書いていない。GPU は借りていない。モデルは1本も作っていない。**⛔ **規則の再検討はしない。**
+> ★ **次の着手は Lambda の API キーの新規発行 → GPU を借りる → `nohup bash scripts/df1-orchestrate.sh &`。**
+> オーケストレータが第0段 → 学習3本 → λ=0.8 → 関門 G0〜G5 → **検出器(`72-detector-firstlight.sh`)**
+> → 副次まで回す。手順は [docs/NEXT.md](docs/NEXT.md) の決定ブロックが正。
 
 > [!note] 旧・現在地(2026-08-08・履歴として残す)
 > **公開済み**(PUBLIC)。次は **[docs/NEXT.md](docs/NEXT.md) のステップ1** —— Nejumi の

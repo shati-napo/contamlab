@@ -1,4 +1,4 @@
-# NEXT — 次の一手(2026-08-20 更新・作業4 = B案 を事前登録済み / 実装は未着手)
+# NEXT — 次の一手(2026-08-20 更新・作業4 = B案 の事前登録と実装が完了 / 次は GPU)
 
 > このファイルが**再開点**。ここから読み、終わったらここを更新する。
 > 一次情報はリポジトリ、Obsidian の [[contamlab]] はその索引。数字が食い違ったらこちらが正。
@@ -7,9 +7,11 @@
 
 ## ▶ 次のセッションはここから着手する(2026-08-20 引き継ぎ)
 
-> ★ **作業1〜3 は完了。作業4(B案)の事前登録は 2026-08-20 に書き、commit `7cc802a` で凍結した。**
-> **ラン名は `detector-firstlight-01`。**⛔ **結果は1文字も書いていない。GPU は借りていない。**
-> **次にやることは着手手順1「実装」**(課金ゼロ)→ [下の決定ブロック](#-作業4-は-b案に決定2026-08-19ユーザー決定-実行は-2026-08-20-に回す)
+> ★ **作業1〜3 は完了。作業4(B案)の事前登録(commit `7cc802a`)と実装(commit `9722102`)は
+> 2026-08-20 に完了した。**ラン名は **`detector-firstlight-01`**。
+> ⛔ **結果は1文字も書いていない。GPU は借りていない。モデルは1本も作っていない。**
+> **次にやることは Lambda の API キーの新規発行 → GPU を借りる**
+> → [下の決定ブロック](#-作業4-は-b案に決定2026-08-19ユーザー決定-実行は-2026-08-20-に回す)
 > ⛔ **事前登録の規則は1文字も動かさない。**規則の本体は
 > [preregister.md](../preregister.md) の「ラン: detector-firstlight-01」節が正。
 
@@ -110,14 +112,19 @@ README が謳う「設計を実行前に拒否する」挙動の**実発火を�
    ★ **手元で検出力を計算して凍結した**(n=4,742 / 5pt / ψ=0.4050 / **α=0.0250**(M=2)→
    検出確率 **0.99973** / 最小検出可能 **2.5885pt**)。⛔ **これは正規近似の値。厳密検定では悪い側なので
    「概ね 2.7pt」と読む。**⛔ **n=4,742 の厳密値は列挙が 10 分で終わらず計算していない**
-2. ★ **いまここ: 実装**(★ **課金ゼロ・GPU 0 台**)。preregister の「実装」表が正。
-   `train_lora.py` / `scale_adapter.py` の凍結表に行を足し、
-   **`finetune/prepare_df1_arms.py`(6本の複製)・`scripts/72-detector-firstlight.sh`(★ 新設)・
-   `tools/split_drop_by_injection.py`(副次)・`scripts/df1-orchestrate.sh`** を書く。
-   ⛔ **`contamlab/` 配下と `scripts/70-positive-control.sh` は1行も触らない。**
-   **テスト全件通過と `contamlab verify` を確認してコミット**
-3. **Lambda の新しい API キーを発行する**(旧キーは 2026-08-19 にユーザーが失効済み)→ 借りる
-   → ★ **`05-arm-cost-watchdog.sh` を最初に立てる**(ハード期限 9.0h ≒ $17.9 / 上限 $20)
+2. ~~**実装**~~ → ✅ **2026-08-20 完了。commit `9722102`。課金ゼロ・GPU 0 台・API 0 回。**
+   **テスト 496 件通過 / `contamlab verify` 通過。**⛔ **`contamlab/` 配下も
+   `scripts/70-positive-control.sh` も1行も触っていない**(テストで機械が確かめる)。
+   新設: **`scripts/72-detector-firstlight.sh`**(検出器・M=2)/ **`scripts/df1_gate.py`**(関門 G0〜G5)/
+   **`scripts/df1-orchestrate.sh`**(段の順序をインスタンス側へ)/ `finetune/prepare_df1_arms.py` /
+   `tools/split_drop_by_injection.py`(副次)/ `tests/test_df1_arms.py`(35件)。
+   ★ **注入集合の複製は手元で実行済み**(6本・sha256 は pc-01 と一致・1,896問・ll-01 と衝突なし)
+3. ★ **いまここ: Lambda の新しい API キーを発行する**(旧キーは 2026-08-19 にユーザーが失効済み)
+   → **借りる**(★ 機種が `gpu_1x_a100_sxm4` であることを先に確かめ、インスタンスに名前を付ける)
+   → ★ **`05-arm-cost-watchdog.sh` を最初に立て、鼓動を確認する**(ハード期限 9.0h ≒ $17.9 / 上限 $20)
+   → `10-bootstrap.sh` → `20-rebuild-benchmark.sh` → 環境タグを export → `30-record-environment.sh`
+   → 書式 C → `prepare_df1_arms.py` → probe → **`nohup bash scripts/df1-orchestrate.sh &`**
+   ★ **オーケストレータが第0段から検出器まで全部回す**(手元の PC が落ちても進み、止まる)
 4. **第0段 → 学習3本 → λ=0.8 → 操作チェック → `72-detector-firstlight.sh`**(★ 検出器の初撃)
 5. 無人ランの手順で締める(下の「環境メモ」)
 
