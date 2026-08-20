@@ -1,0 +1,65 @@
+{
+  "run": "detector-firstlight-01",
+  "note": "pc-01 の注入集合をアーム名だけ変えて複製したもの。中身は生成していない。ll-01 のアームとは別名にしてある(応答キャッシュのキーがモデル名で、ll-01 は実際に応答を残しているため。同名にすると作り直したモデルが1度も呼ばれずに終わる)。★ 学習するのは df1t1/df1t2/df1t3 の3本で、**3本とも設定も seed も同一**である。df1L08 × t1/t2/t3 の3本は学習しない —— 3本のアダプタそれぞれから α → λ·α でマージし直して作る。★ λ は 0.8 の1段だけである(ll-01 が合格させた唯一の段)。本ランが動かす軸は「検出器に通すこと」だけであり、λ も注入率も動かさない。**6本とも注入集合の中身は同一**であり、違うのは作り方だけである。",
+  "source_run": "positive-control-01",
+  "inject_salt": "contamlab-inject-v1",
+  "split": "dev",
+  "dev_size": 4742,
+  "template_sha256": "fb7a254c4b1addfeace26287e586aa7f44a44a3a99b337b22383cb3485f28b2e",
+  "arms": [
+    {
+      "name": "df1t1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "df1t2-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "df1t3-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "df1L08t1-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "df1L08t2-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    },
+    {
+      "name": "df1L08t3-x40",
+      "copied_from": "pc-x40",
+      "injection_rate": 0.4,
+      "n_injected": 1896,
+      "chars": 322348,
+      "txt_sha256": "43fdb683305c40fd7cdbf4805b711ae566bf0112c74c44c755a80dd166f05b69",
+      "ids_sha256": "20d8f8bca53cd6fae7d4a28dc57fbb3e3209b37b6022b0f0711d614bfecff5a8"
+    }
+  ]
+}

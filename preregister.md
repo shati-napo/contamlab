@@ -5862,7 +5862,42 @@ python finetune/prepare_cc01_arms.py --measure-tokens # ② ★ 6水準の注入
 
 ### 着手手順(★ 上から順。飛ばさない)
 
-1. **実装**(上の表。**課金ゼロ**・テスト全件通過と `contamlab verify` を確認してコミット)
+1. ~~**実装**(上の表。**課金ゼロ**・テスト全件通過と `contamlab verify` を確認してコミット)~~
+   → ✅ **2026-08-20 完了。規則は1つも変えていない。課金ゼロ・GPU 0 台・API 0 回。**
+   **テスト 496 件通過 / `contamlab verify` 3項目とも通過。**
+   ⛔ **`contamlab/` 配下は1行も触っていない。**⛔ **`scripts/70-positive-control.sh` も1行も触っていない**
+   (テストで「6アーム / α=0.008333 のまま」を機械が確かめる)。
+   - `train_lora.py` — 凍結表に本ランの行を足した(`RUN_BASES` / `INJECTED_TOKENS_ONCE_BY_RUN`
+     **238,082** / `ARM_PREFIXES` **`df1`** / `DF1_RECIPE` = R1 / `DF1_TRAIN_ARMS` / `REPLICATE_TRAIN_ARMS`)。
+     ★ **`RECIPES` も `FILLER_FLOORS` も `SEED` も1文字も変えていない。**
+     **R1 以外・複製 1〜3 以外は起動を拒否する**ことを実機で確かめた
+   - `scale_adapter.py` — `DF1_STEPS` = `("L1",)` と `DF1_LAMBDA_ARMS` を足した。
+     ★ **`LAMBDA_STEPS` は1文字も変えていない。****L0・L2〜L4 を渡すと起動を拒否する**(実機で確認)。
+     ★ **ll-01 / pc-06 / cc-01 のアーム対応が壊れていないことをテストで固定した**
+   - `finetune/prepare_df1_arms.py`(新規)— pc-01 の `pc-x40` から **6本**を複製。
+     ★ **2026-08-20 に手元で実行済み** —— sha256 は pc-01 の manifest と一致、`n_injected` = **1,896**、
+     **ll-01 のアーム名と1本も衝突しない**ことを確認(`data/injection/manifest-df1.json`)
+   - `scripts/72-detector-firstlight.sh`(新規)— `70` の複製。★ **差分はロースター(M=2)と
+     実効 α(0.0250)だけ。**`n` = 4,742・`--perturbator shuffle_choices`・`--k 1`・`--split dev`・
+     効果量 0.05・想定 ψ 0.4050 が `70` と同一であることを**テストで機械が確かめる**
+   - `scripts/df1_gate.py`(新規)— ★ **関門 G0〜G5 を機械に守らせる。**
+     ⛔ **閾値はコマンドラインから受け取らない**(規則の側を動かせないようにするため)。
+     ★ **65 の出力を読む関数と条件 c の読みは cc-01 の実装をそのまま呼ぶ**(同じ出力を
+     別々に読む経路を2つ作らない)。⛔ **`cc01_gate.py` は1行も変えていない。**
+     ★ **`report-a` は印字するだけで、止める口を持たない**(preregister「★ a を関門にしない」)——
+     **これをテストで固定した**(a が明確に不合格でも返り値 0)
+   - `scripts/df1-orchestrate.sh`(新規)— 段の順序と分岐をインスタンス上へ移した(cc-01 の作法)。
+     ⛔ **判定の定数は1つも持たない。**⛔ **`65` に `|| exit 1` を付けていない**(td-01・ll-01 で踏んだ穴)
+   - `tools/split_drop_by_injection.py`(新規)— 副次の読み。**推論を1回も増やさない**
+     (応答が欠けていたら**推論せずに止まる**ことをテストで固定した)
+   - `tests/test_df1_arms.py`(新規・**35 件**)— アーム名の衝突・λ 1段・R1 のみ・`70` 不変・
+     関門の合否・a が止めないこと・閾値が事前登録の値から動いていないことを機械が確かめる
+   - `probe_micro_batch.py` は**変更不要**だった(`--run` の候補を `RUN_BASES` から引くため、
+     凍結表に足した時点で受け付ける)
+   - ★ **実装中に見つけた小さな穴(規則ではない)**: `⛔`(U+26D4)と `——`(U+2014)は
+     **Windows コンソール(cp932)で `UnicodeEncodeError` になる。**ll-01 の流儀に合わせ、
+     **印字・書き出しの文字列では `★` を使う**ようにした(コメントと docstring はそのまま)。
+     **実行は Linux なので測定には影響しない**(`cc01_gate.py --help` も同じ理由で手元では落ちる)
 2. **Lambda の API キーを新規発行**(旧キーは 2026-08-19 に失効済み)→ **借りる**
    → ★ **段 0.5(`05-arm-cost-watchdog.sh`)を最初に立て、鼓動を確認する**
 3. `10-bootstrap.sh` → `20-rebuild-benchmark.sh` → 環境タグを **export してから** `30-record-environment.sh`
@@ -5906,6 +5941,20 @@ python tools/split_drop_by_injection.py            # 副次・追加課金ゼロ
 ---
 
 ## 変更履歴
+
+- **2026-08-20(ラン `detector-firstlight-01` の実装が完了した。★ 実行前・課金ゼロ・GPU 0 台・API 0 回)**:
+  ★ **規則は1つも変えていない。**⛔ **`contamlab/` 配下も `scripts/70-positive-control.sh` も1行も触っていない。**
+  **テスト 496 件通過 / `contamlab verify` 3項目とも通過。**
+  ★ **新設: `scripts/72-detector-firstlight.sh`(検出器・M=2)/ `scripts/df1_gate.py`(関門 G0〜G5)/
+  `scripts/df1-orchestrate.sh`(段の順序をインスタンス側へ)/ `finetune/prepare_df1_arms.py` /
+  `tools/split_drop_by_injection.py`(副次・追加課金ゼロ)/ `tests/test_df1_arms.py`(35 件)。**
+  ★ **注入集合の複製は 2026-08-20 に手元で実行済み**(6本・sha256 は pc-01 と一致・`n_injected` 1,896・
+  ll-01 のアーム名と衝突なし)。
+  ★ **関門の閾値はすべて過去ランの凍結値**(第0段 [0.562, 0.658] / 1.6% は pc-04、
+  b 0.30・c 5%・a 10pt は pc-02、50% は cc-01、1.686 は rj-01)。⛔ **新しい数字は1つも作っていない。**
+  ★ **`a` を関門にしない**という事前登録の判断を、**機械で固定した** —— `report-a` は
+  止める口を持たず、a が明確に不合格でも返り値 0 であることをテストが確かめる。
+  ⛔ **モデルは1本も作っておらず、GPU は借りていない。結果は1文字も書いていない。**
 
 - **2026-08-20(ラン `detector-firstlight-01` を事前登録した。★ 実行前・課金ゼロ・GPU 0 台)**:
   ★ **12 ラン通じて一度も走っていない検出器を、実モデルに初めて当てる。**

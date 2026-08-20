@@ -48,8 +48,8 @@ import tempfile
 from pathlib import Path
 
 from train_lora import (CC01_RATES, CC01_RECIPE, CC01_REPLICATES, CC01_RUN,
-                        CC01_TRAIN_ARMS, LL01_RECIPE, LL01_TRAIN_ARMS,
-                        PC06_RECIPE, RECIPES, RUN_BASES, recipe_arms)
+                        CC01_TRAIN_ARMS, DF1_RECIPE, DF1_TRAIN_ARMS, LL01_RECIPE,
+                        LL01_TRAIN_ARMS, PC06_RECIPE, RECIPES, RUN_BASES, recipe_arms)
 
 RUN = "positive-control-06"
 
@@ -128,6 +128,27 @@ CC01_LAMBDA_ARMS: dict[tuple[str, int, str], str] = {
 }
 
 # ---------------------------------------------------------------------------
+# ★ ラン detector-firstlight-01 の段とアーム。
+#   preregister「## ラン: detector-firstlight-01」→「凍結した設計」が正であり、
+#   **2026-08-20 に、モデルを1本も作る前に凍結された**(commit 7cc802a)。
+#
+#   ★ **段は L1(λ = 0.8)の1つだけである。**ll-01 が合格させた唯一の段であり、
+#     本ランが動かすのは λ ではなく「**検出器に通すこと**」だけである。
+#   ⛔ **他の λ を1つも足さない**(停止条件 7)。⛔ **L0 を渡す口も無い**
+#     —— replicate-judge-01 が k=5 で決着させた段の蒸し返しになる。
+#
+#   ★ 複製3本ぶんの名前を持つのは、a・b・c を `k`=3 の分布で判定するためである。
+#     ⛔ **検出器に通すのは `t1` の1本だけ**(preregister で事前固定)。
+#     この表は「作る」ための表であって、「通す」相手を選ぶ表ではない。
+# ---------------------------------------------------------------------------
+DF1_RUN = "detector-firstlight-01"
+DF1_STEPS = ("L1",)
+DF1_LAMBDA_ARMS: dict[tuple[str, int], str] = {
+    (step, n): f"df1L{round(LAMBDA_STEPS[step] * 10):02d}t{n}-x40"
+    for step in DF1_STEPS for n in DF1_TRAIN_ARMS
+}
+
+# ---------------------------------------------------------------------------
 # ★ ラン → 段・アーム・レシピ・関門。**どちらの表も事前登録の凍結表である。**
 #   pc-06 は1本のアダプタから5段を作る(複製なし)。
 #   ll-01 は3本のアダプタそれぞれから4段を作る(複製あり)。
@@ -162,6 +183,15 @@ RUNS: dict[str, dict] = {
         # ★ 注入率を振る唯一のラン。アーム名の鍵が3つ(段・複製・注入率)になる。
         "rated": True,
     },
+    DF1_RUN: {
+        "recipe": DF1_RECIPE,
+        "steps": DF1_STEPS,                    # ★ L1(λ=0.8)の1段だけ
+        # ★ 関門は置かない —— ll-01 と同じ理由(判定は絶対的な a・b・c で行う)。
+        #   本ランの関門 G0〜G5 は preregister にあり、段の表ではなく手順が守る。
+        "gate_steps": (),
+        "replicated": True,
+        "rated": False,
+    },
 }
 
 DEFAULT_RUN = RUN
@@ -179,6 +209,8 @@ def source_arm(run: str = DEFAULT_RUN, replicate: int | None = None,
     """
     if RUNS[run].get("rated"):
         return CC01_TRAIN_ARMS[(rate, replicate)]
+    if run == DF1_RUN:
+        return DF1_TRAIN_ARMS[replicate]
     if RUNS[run]["replicated"]:
         return LL01_TRAIN_ARMS[replicate]
     return recipe_arms(run)[RUNS[run]["recipe"]]
@@ -189,6 +221,8 @@ def target_arm(run: str, step: str, replicate: int | None = None,
     """段(と複製・注入率)→ アーム名。**凍結表から引く。手で組み立てない。**"""
     if RUNS[run].get("rated"):
         return CC01_LAMBDA_ARMS[(step, replicate, rate)]
+    if run == DF1_RUN:
+        return DF1_LAMBDA_ARMS[(step, replicate)]
     if RUNS[run]["replicated"]:
         return LL01_LAMBDA_ARMS[(step, replicate)]
     return LAMBDA_ARMS[step]

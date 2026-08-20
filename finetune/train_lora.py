@@ -75,6 +75,9 @@ BASE_REVISION = "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
 #   lambda-ladder-01: **pc-04〜td-01 と同一。** 本ランが動かすのは pc-06 と同じ
 #       **推論時の LoRA スケール λ だけ**である。違うのは**判定の単位**で、
 #       λ の各段を**複製3本の分布**で判定する(下の LL01_RECIPE / LL01_TRAIN_ARMS)。
+#   detector-firstlight-01: **ll-01 と完全に同一。** 本ランは学習の設定を1つも動かさない ——
+#       ll-01 の L1(λ=0.8)をそのまま作り直し、**検出器(70 と同じ contamlab run の経路)に
+#       初めて通す**ためだけのランである(下の DF1_RECIPE / DF1_TRAIN_ARMS)。
 # ---------------------------------------------------------------------------
 SWALLOW_8B = ("tokyotech-llm/Llama-3.1-Swallow-8B-Instruct-v0.5",
               "b1f8317099a97e790ec872c1225ca155979b4816")
@@ -88,6 +91,7 @@ RUN_BASES: dict[str, tuple[str, str]] = {
     "train-determinism-01": SWALLOW_8B,
     "lambda-ladder-01": SWALLOW_8B,
     "calibration-curve-01": SWALLOW_8B,
+    "detector-firstlight-01": SWALLOW_8B,
 }
 
 EXPOSURES_E = 12                 # 注入1問あたりの露出回数(全アーム同一)
@@ -168,6 +172,7 @@ INJECTED_TOKENS_ONCE_BY_RUN: dict[str, int] = {
     "merge-variance-01": 238_082,     # 同上(mv01 もベースを変えない)
     "train-determinism-01": 238_082,  # 同上(td-01 もベースを変えない)
     "lambda-ladder-01": 238_082,      # 同上(本ランもベースを変えない)
+    "detector-firstlight-01": 238_082,  # 同上(df-01 もベースを変えない)
 }
 
 RECIPES: dict[str, dict] = {
@@ -189,7 +194,7 @@ RECIPES: dict[str, dict] = {
 ARM_PREFIXES = {"positive-control-02": "pc", "positive-control-04": "pc4",
                 "positive-control-05": "pc5", "positive-control-06": "pc6",
                 "merge-variance-01": "mv1", "train-determinism-01": "td1",
-                "lambda-ladder-01": "ll1"}
+                "lambda-ladder-01": "ll1", "detector-firstlight-01": "df1"}
 
 
 def recipe_arms(run: str) -> dict[str, str]:
@@ -268,6 +273,25 @@ TD01_TRAIN_ARMS: dict[int, str] = {1: "td1t1-x40", 2: "td1t2-x40", 3: "td1t3-x40
 # ---------------------------------------------------------------------------
 LL01_RECIPE = "R1"
 LL01_TRAIN_ARMS: dict[int, str] = {1: "ll1t1-x40", 2: "ll1t2-x40", 3: "ll1t3-x40"}
+
+
+# ---------------------------------------------------------------------------
+# ★ ラン detector-firstlight-01 が使うレシピと、学習3本のアーム名。
+#   preregister「## ラン: detector-firstlight-01」→「凍結した設計」が正であり、
+#   **2026-08-20 に、モデルを1本も作る前に凍結された**(commit 7cc802a)。
+#
+#   ★ 本ランは**学習の設定を1つも動かさない。** ll-01 の L1(λ=0.8)を作り直し、
+#     **検出器に初めて通す**ためだけのランである。動かす軸は「検出器に通す」ことだけ。
+#     ⛔ R1 以外を渡す口は塞ぐ —— 塞がなければ、それが事前登録の外に出る口になる。
+#
+#   ★ ll-01・td-01 と同じく、**replicate ごとに SEED を変えない。**
+#     変えたら「同一条件の再現ばらつき」ではなくなり、k=3 の判定の前提が崩れる。
+#   ⛔ **4本目の口は用意しない** —— 用意すれば「閾値を跨ぐまで足す」ができてしまう。
+#   ⛔ **アーム名は ll-01 と別である。**同じ名前を使うと応答キャッシュが ll-01 の
+#     答えを返し、作り直したはずのモデルを1度も呼ばずに終わる。
+# ---------------------------------------------------------------------------
+DF1_RECIPE = "R1"
+DF1_TRAIN_ARMS: dict[int, str] = {1: "df1t1-x40", 2: "df1t2-x40", 3: "df1t3-x40"}
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +376,7 @@ def cc01_injected_tokens(rate: str,
 REPLICATE_TRAIN_ARMS: dict[str, dict[int, str]] = {
     "train-determinism-01": TD01_TRAIN_ARMS,
     "lambda-ladder-01": LL01_TRAIN_ARMS,
+    "detector-firstlight-01": DF1_TRAIN_ARMS,
 }
 
 
@@ -413,8 +438,11 @@ LL01_ARMS = list(LL01_TRAIN_ARMS.values())
 # ★ calibration-curve-01 が学習するのは 6水準 × 複製3本 = 18本である
 #   (λ=0.8 の段は学習しない。18本のアダプタそれぞれから scale_adapter.py が作る)。
 CC01_ARMS = list(CC01_TRAIN_ARMS.values())
+# ★ detector-firstlight-01 が学習するのも R1 の3本である(λ=0.8 の段は学習しない。
+#   3本のアダプタそれぞれから scale_adapter.py が作る)。
+DF1_ARMS = list(DF1_TRAIN_ARMS.values())
 LADDER_ARMS = (PC02_ARMS + PC04_ARMS + PC05_ARMS + PC06_ARMS + MV01_ARMS
-               + TD01_ARMS + LL01_ARMS + CC01_ARMS)
+               + TD01_ARMS + LL01_ARMS + CC01_ARMS + DF1_ARMS)
 
 
 def pack(sequences: list[list[int]], eos: int, block: int) -> list[list[int]]:
@@ -573,6 +601,14 @@ def main() -> int:
             print(f"★ ラン lambda-ladder-01 が学習するのは {LL01_RECIPE} だけである"
                   f"(指定: {args.recipe})。本ランが動かすのは推論時の LoRA スケール λ で、"
                   "レシピではない。段は finetune/scale_adapter.py が同一のアダプタから作る。")
+            return 1
+        # ★ detector-firstlight-01 が学習するのも DF1_RECIPE の1本だけである。
+        #   本ランが動かすのは**検出器に通すこと**だけであって、レシピでも λ でもない。
+        #   R1 に固定してあるのは、陽性対照を成立させた ll-01 が R1 だからである。
+        if args.run == "detector-firstlight-01" and args.recipe != DF1_RECIPE:
+            print(f"★ ラン detector-firstlight-01 が学習するのは {DF1_RECIPE} だけである"
+                  f"(指定: {args.recipe})。本ランは学習の設定を1つも動かさない —— "
+                  "ll-01 の L1(λ=0.8)を作り直し、検出器に初めて通すためのランである。")
             return 1
         # ★ calibration-curve-01 が学習するのも CC01_RECIPE の1本だけである。
         #   本ランが動かすのは**注入率**であって、レシピでも λ でもない。
