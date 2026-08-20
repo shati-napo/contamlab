@@ -122,7 +122,12 @@ if [ ! -f data/injection/df1L08t1-x40.ids ]; then
   python3 finetune/prepare_df1_arms.py || stop_run "注入集合の複製に失敗(sha256 が pc-01 と違う)"
 fi
 if [ ! -f reports/micro-batch ]; then
-  say "[P] micro-batch を probe で決める(★ 人が決めない)"
+  # ★ probe は**学習と同じ VRAM の条件**で走らせる。Ollama が載ったままだと
+  #   9GB ほど掴まれた状態で「載らない」と判定し、実効バッチの内訳が
+  #   ll-01(micro 4 × grad_accum 4)と変わってしまう。⛔ 規則ではなく実測条件の問題である。
+  say "[P] micro-batch を probe で決める(★ 人が決めない。Ollama を止めてから測る)"
+  sudo systemctl stop ollama || true
+  sleep 3
   $PY_VENV finetune/probe_micro_batch.py --run detector-firstlight-01 --recipe R1     || stop_run "probe に失敗"
 fi
 
