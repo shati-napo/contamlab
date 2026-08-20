@@ -5860,6 +5860,41 @@ python finetune/prepare_cc01_arms.py --measure-tokens # ② ★ 6水準の注入
 ⛔ **`sudo shutdown -h` に頼らない** —— Lambda では OS を落としても課金が止まらないことを 2026-08-17 に実測済み。
 ★ **API キーはこのラン専用に新規発行し、**★ **ラン終了後に失効させる**(インスタンス上に置くため)。
 
+### 実行環境(2026-08-20 記録・★ 測定値を1つも読む前に貼った)
+
+| 項目 | 値 |
+|---|---|
+| インスタンス | `(EC2 外)` / — / — |
+| GPU | NVIDIA A100-SXM4-40GB, 40960 MiB, 580.105.08 |
+| CUDA | 13.0 |
+| OS / カーネル | Ubuntu 22.04.5 LTS / 6.8.0-1046-nvidia |
+| Ollama | `ollama version is 0.32.14` |
+| Ollama の環境変数 | `PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin OLLAMA_HOST=127.0.0.1:11434 OLLAMA_NUM_PARALLEL=1 OLLAMA_MAX_LOADED_MODELS=1 OLLAMA_KEEP_ALIVE=30m OLLAMA_MODELS=/opt/ollama/models ` |
+| contamlab | `bab29b6` |
+| 応答キャッシュ | `data/cache/responses.lambda-a100-df1-20260820.jsonl`(**この環境専用。CPU 時代のものは持ち込まない**) |
+| ベンチマークの生 sha256 | `8aa877e57335daca61a9aa4e676e78e1da5a7608806f6e959e1e67bc56317745` / 6664 行 / CRLF 7 箇所|
+
+| モデル | 取得元 | GGUF の SHA256 |
+|---|---|---|
+| `llmjp3-13b` | `hf.co/mmnga/llm-jp-3-13b-instruct3-gguf:Q4_K_M` | `9e46c803b89341f49469ade52fe539850e91a07ef524e0c6a99cd1148e44b60f` |
+| `swallow31-8b` | `hf.co/mmnga/Llama-3.1-Swallow-8B-Instruct-v0.5-gguf:Q4_K_M` | `6da177cee6797ad8f67cdaf6fac5d52818cc0582c7b0779c5c50ef419ca0b088` |
+
+> `OLLAMA_NUM_PARALLEL=1` は決定性のための設定である。並列実行はリクエストを
+> バッチにまとめるので、バッチの組み方で浮動小数の加算順序が変わりうる。
+> `temperature 0` は「最も確率の高い選択肢を選ぶ」であって「計算結果が同じになる」
+> ではない。決定性は宣言ではなく **scripts/50-check-determinism.sh の実測**で示す。
+
+★ **ドライバは 580.105.08**(ll-01 は 570.148.08。⛔ **停止条件ではない。記録のみ**)。
+★ **Ollama は 0.32.14**。**応答キャッシュはこの環境専用に切ってある。**
+
+#### ★ 実効バッチの内訳(★ probe が決めた。人が決めていない)
+
+⛔ **1回目の probe は Ollama が VRAM を 9GB 掴んだまま走り、`micro 2 × grad_accum 8` を選んだ。**
+★ **これは実測条件の誤りである** —— 学習時は Ollama を止めるので、同じ条件で測り直した。
+★ **オーケストレータ側も「probe の前に Ollama を止める」よう直した**(実装の穴・規則ではない)。
+⛔ **実効バッチ 16 は pc-01 以来変えていない。**変わりうるのは内訳だけで、
+**ブロック数・steps・T・seed は内訳に依らない**(= 関門 G1 は影響を受けない)。
+
 ### 着手手順(★ 上から順。飛ばさない)
 
 1. ~~**実装**(上の表。**課金ゼロ**・テスト全件通過と `contamlab verify` を確認してコミット)~~
