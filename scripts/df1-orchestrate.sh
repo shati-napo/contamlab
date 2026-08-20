@@ -132,6 +132,11 @@ if [ ! -f reports/micro-batch ]; then
 fi
 
 # ---- G0: 第0段(素のベース)-------------------------------------------------
+# ★ probe の段で Ollama を止めているので、**先に起こしてから在庫を見る。**
+#   止まったまま `ollama show` を撃つと「無い」と読み、作り直しに 6 分払う
+#   (2026-08-20 に実際に払った。⛔ 規則ではなく手順の穴である)。
+sudo systemctl start ollama || true
+sleep 5
 if ! ollama show "$BASE_ARM" >/dev/null 2>&1; then
   say "[B] ベースを書き出して GGUF にする"
   sudo systemctl stop ollama || true
