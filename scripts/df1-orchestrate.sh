@@ -107,6 +107,25 @@ while pgrep -f "finetune/train_lora.py" > /dev/null; do
   sleep 120
 done
 
+# ---- 事前条件 --------------------------------------------------------------
+# ★ ベンチマークと注入集合は .gitignore 対象(問題文そのものなので配らない)。
+#   借りたホストでは作り直しになる。⛔ 中身は再生成だが、prepare_df1_arms.py が
+#   pc-01 の manifest と sha256 で照合するので、1バイトでも違えば書き込みを残さず止まる。
+[ -f data/jmmlu.jsonl ] || stop_run "data/jmmlu.jsonl が無い。先に 20-rebuild-benchmark.sh を通すこと"
+[ -f reports/prompt-format ] || stop_run "reports/prompt-format が無い(書式 C を置くこと)"
+if [ ! -f data/injection/pc-x40.ids ]; then
+  say "[P] 注入集合を作り直す(pc-01 の規則。salt と pin から決まる決定論的な量)"
+  python3 tools/build_injection_sets.py || stop_run "注入集合の生成に失敗"
+fi
+if [ ! -f data/injection/df1L08t1-x40.ids ]; then
+  say "[P] 本ランのアームへ複製(sha256 を pc-01 の manifest と照合する)"
+  python3 finetune/prepare_df1_arms.py || stop_run "注入集合の複製に失敗(sha256 が pc-01 と違う)"
+fi
+if [ ! -f reports/micro-batch ]; then
+  say "[P] micro-batch を probe で決める(★ 人が決めない)"
+  $PY_VENV finetune/probe_micro_batch.py --run detector-firstlight-01 --recipe R1     || stop_run "probe に失敗"
+fi
+
 # ---- G0: 第0段(素のベース)-------------------------------------------------
 if ! ollama show "$BASE_ARM" >/dev/null 2>&1; then
   say "[B] ベースを書き出して GGUF にする"
