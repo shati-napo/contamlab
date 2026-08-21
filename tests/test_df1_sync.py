@@ -213,3 +213,39 @@ def test_同期の失敗ではランを止めない():
     fn = src[src.index("sync_now() {"):src.index("sync_now() {") + 200]
     assert "|| true" in fn, "★ 同期の失敗でランが落ちる"
     assert "timeout" in fn, "★ 同期が固まるとランが止まる"
+
+
+# ---------------------------------------------------------------------------
+# 立ち上げの自己完結性 —— ★ 手順書にしか無い段は、いつか誰かが飛ばす
+# ---------------------------------------------------------------------------
+def _orchestrator() -> str:
+    return (Path(__file__).resolve().parent.parent
+            / "scripts" / "df1-orchestrate.sh").read_text(encoding="utf-8")
+
+
+def test_学習環境は手順書ではなくランの中で作る():
+    """2026-08-21: `finetune/.venv` を作る段が README にしか無く、立ち上げが飛ばした。
+
+    ⛔ probe は venv の python で走るので、無ければそこで落ちて GPU が空回りする。
+    """
+    src = _orchestrator()
+    i_venv = src.index("python3 -m venv finetune/.venv")
+    i_probe = src.index("probe_micro_batch.py")
+    assert i_venv < i_probe, "★ venv を作る前に probe を撃っている"
+    assert "finetune/requirements.txt" in src, "★ 依存を入れていない"
+    assert "prepare_filler.py" in src, "★ 埋め草(学習の入力)を作っていない"
+    # 冪等であること —— 途中から起動し直しても作り直さない
+    assert '[ ! -x "$PY_VENV" ]' in src, "★ 既に在っても作り直してしまう"
+    assert "data/filler/filler.jsonl" in src, "★ 埋め草の置き場所が train_lora と食い違う"
+
+
+def test_期限を寄せる相手は名前ではなく_instance_id_で指す():
+    """2026-08-21: `--name contamlab-df1` の直書きが実機 `...-20260821` に当たらず、
+    完走後・停止後に期限を手前へ寄せられなかった(= 空回りの課金が残る)。
+    """
+    src = _orchestrator()
+    grace = src[src.index("grace() {"):src.index("stop_run() {")]
+    assert "--instance-id" in grace, "★ 名前で探し直している"
+    assert "--name contamlab-df1" not in grace, "★ 名前の直書きが残っている"
+    assert "instance_id" in grace and "cost-watchdog.json" in grace, \
+        "★ 見張りが確定させた対象を引き継いでいない"

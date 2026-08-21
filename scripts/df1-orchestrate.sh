@@ -55,7 +55,14 @@ grace() {
   say "[grace] ハード期限を現在 +${GRACE_HOURS}h に寄せ直す(★ 厳しい側にしか動かさない)"
   # ★ 金額は GRACE_HOURS から出す。⛔ 直書きすると猶予を縮めたときに置き去りになる
   #   (2026-08-21: 6h -> 1h に縮めた。ここが 11.94 のままなら期限は 6h 先のままだった)
-  python3 scripts/cost_watchdog.py arm --name contamlab-df1 \
+  # ★ 対象は**名前で探さない**。見張りが arm 時に確定させた instance_id をそのまま使う。
+  #   (2026-08-21: 名前を `contamlab-df1` と直書きしていたため、名前を付けて借りた実機
+  #    `contamlab-df1-20260821` に当たらず、期限を寄せ損ねた。⛔ 同じ箱を指しているのに
+  #    別の綴りで探し直す構造そのものが穴である)
+  local iid
+  iid=$(python3 -c "import json;print(json.load(open('reports/cost-watchdog.json'))['instance_id'])" 2>/dev/null || echo "")
+  [ -n "$iid" ] || { say "[grace] 見張りの状態が読めない。⛔ 期限は触らない"; return 0; }
+  python3 scripts/cost_watchdog.py arm --instance-id "$iid" \
       --price-usd-per-hour 1.99 \
       --hard-usd "$(python3 -c "print(round(1.99*${GRACE_HOURS},2))")" --budget-usd 20 \
       --started-at-utc "$(date -u +%FT%TZ)" --interval 300 || return 0
@@ -147,6 +154,23 @@ if [ ! -f data/injection/df1L08t1-x40.ids ]; then
   say "[P] 本ランのアームへ複製(sha256 を pc-01 の manifest と照合する)"
   python3 finetune/prepare_df1_arms.py || stop_run "注入集合の複製に失敗(sha256 が pc-01 と違う)"
 fi
+# ★ 学習環境は**この中で作る**。⛔ 手順書にしか無い段は、いつか誰かが飛ばす。
+#   (2026-08-21: 立ち上げ手順がこれを飛ばし、probe が `finetune/.venv/bin/python が無い` で
+#    落ちた。10-bootstrap.sh は contamlab 側しか用意せず、学習側は README の手作業だった)
+if [ ! -x "$PY_VENV" ]; then
+  say "[E] 学習環境を作る(finetune/.venv + requirements)"
+  python3 -m venv finetune/.venv           || stop_run "venv の作成に失敗"
+  $PY_VENV -m pip install -q --upgrade pip || stop_run "pip の更新に失敗"
+  $PY_VENV -m pip install -q -r finetune/requirements.txt \
+      || stop_run "学習側の依存の導入に失敗"
+fi
+# ★ 埋め草は学習の入力である(注入したぶんだけ長さが変わらないよう埋める)。
+#   JMMLU との逐語重複チェックを内蔵しているので、⛔ 手で作らない。
+if [ ! -f data/filler/filler.jsonl ]; then
+  say "[E] 埋め草を作る(★ JMMLU との逐語重複を内蔵チェック)"
+  $PY_VENV finetune/prepare_filler.py      || stop_run "埋め草の生成に失敗"
+fi
+
 if [ ! -f reports/micro-batch ]; then
   # ★ probe は**学習と同じ VRAM の条件**で走らせる。Ollama が載ったままだと
   #   9GB ほど掴まれた状態で「載らない」と判定し、実効バッチの内訳が
