@@ -300,7 +300,7 @@ def cmd_close(args) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--host", default=os.environ.get("DF1_HOST", "129.146.104.106"))
+    ap.add_argument("--host", default=os.environ.get("DF1_HOST", "129.146.22.176"))
     ap.add_argument("--user", default="ubuntu")
     ap.add_argument("--key", default=str(Path.home() / ".ssh" / "contamlab-pc06"))
     ap.add_argument("--instance-id", default="f9a16b8b47a14244b51cd4b953741d29")
