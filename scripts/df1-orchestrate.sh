@@ -39,7 +39,11 @@ say() { echo "=== $* $(ts)"; sync_now "$*"; }
 
 # ★ 終わったら(正常でも異常でも)ハード期限を手前に寄せる。
 #   ⛔ 期限を**後ろへ動かすことはしない**(緩和になる)。
-GRACE_HOURS=6            # ★ 成果物を回収する猶予。6h × $1.99 = $11.94
+# ★ 2026-08-21 に 6h から 1h へ縮めた。**理由: 猶予の目的が消えたため。**
+#   6h は「人が起きてきて手で回収する」ための時間だった。いまは df1_sync.py が
+#   段ごと・900秒ごとに外へ出しているので、終わった時点で成果物はもう手元にある。
+#   ⛔ 前回はこの猶予のあいだ(19:30Z 完走 -> 21:37Z 期限)に $4 を空回りで払った。
+GRACE_HOURS=1            # ★ 中を覗くための余白だけ残す。1h × $1.99 = $1.99
 grace() {
   local cur_epoch new_epoch
   cur_epoch=$(python3 -c "import json;print(int(json.load(open('reports/cost-watchdog.json'))['deadline_epoch']))" 2>/dev/null || echo 0)
@@ -49,8 +53,11 @@ grace() {
     return 0
   fi
   say "[grace] ハード期限を現在 +${GRACE_HOURS}h に寄せ直す(★ 厳しい側にしか動かさない)"
+  # ★ 金額は GRACE_HOURS から出す。⛔ 直書きすると猶予を縮めたときに置き去りになる
+  #   (2026-08-21: 6h -> 1h に縮めた。ここが 11.94 のままなら期限は 6h 先のままだった)
   python3 scripts/cost_watchdog.py arm --name contamlab-df1 \
-      --price-usd-per-hour 1.99 --hard-usd 11.94 --budget-usd 20 \
+      --price-usd-per-hour 1.99 \
+      --hard-usd "$(python3 -c "print(round(1.99*${GRACE_HOURS},2))")" --budget-usd 20 \
       --started-at-utc "$(date -u +%FT%TZ)" --interval 300 || return 0
   sudo systemctl restart contamlab-watchdog || true
   python3 scripts/cost_watchdog.py status || true

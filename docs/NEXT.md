@@ -59,6 +59,46 @@
 
 ★ 手元の PC のスリープ設定は **2026-08-21 10:30Z に元へ戻した**(15分 / 180分)。
 
+---
+
+### ✅ 2026-08-21: 穴は塞いだ(commit `0cce4ba`)—— 再走の手順
+
+**入れたもの**: `scripts/df1_sync.py` —— 成果物を**ホストの外**へ出し続ける。
+
+| | |
+|---|---|
+| ① 段の境目ごと | `df1-orchestrate.sh` の `say()` から `sync_now` を呼ぶ |
+| ② 常駐 | 900 秒ごとに push(★ 検出器の 2.4 時間を守る) |
+| ③ 導通確認 | ⛔ **学習より先に**実際に1コミット push してみる。通らなければ `stop_run` |
+| 置き先 | **private** `github.com/shati-napo/contamlab-artifacts`(本体は public なので分ける) |
+| 鍵 | deploy key `~/.ssh/contamlab-artifacts`(★ そのリポジトリだけに効く。⛔ PAT は置かない) |
+| 送らないもの | `models/`(数 GB・レシピから作り直せる)・`data/jmmlu.jsonl`(問題文そのもの) |
+
+★ **完走後の空回りも縮めた**: `GRACE_HOURS` 6h → **1h**。6h は「人が起きて手で回収する」
+ための猶予だったが、その目的は ① ② が消した。⛔ 前回はこの猶予で $4 を空回りに払った。
+
+**再走の手順(この順で撃つ)**
+
+```powershell
+# 1) GPU を借りる。★ 必ず名前を付ける(名前が無いと Web の Terminate が押せない)
+#    借りたら instance-id と IP を控える
+# 2) 本体を置く(public リポジトリから clone)
+# 3) ★ deploy key を送る —— これを忘れると導通確認で止まる(それが正しい動作)
+scp -i <鍵> $HOME/.ssh/contamlab-artifacts ubuntu@<IP>:~/.ssh/contamlab-artifacts
+ssh ... 'chmod 600 ~/.ssh/contamlab-artifacts'
+# 4) bootstrap → ベンチマーク再構築 → 環境記録
+# 5) ウォッチドッグを arm(★ インスタンスの上で。手元では守れない)
+# 6) nohup bash scripts/df1-orchestrate.sh >> reports/df1-orchestrate.log 2>&1 &
+```
+
+**進み具合は ssh を使わずに読める** —— 置き先リポジトリのコミットが段の記録そのもの:
+
+```powershell
+gh api repos/shati-napo/contamlab-artifacts/commits --jq '.[0:5][].commit.message'
+```
+
+⛔ **事前登録の定数は1文字も動いていない。**
+
 ### 現在地(3行)
 
 ```
