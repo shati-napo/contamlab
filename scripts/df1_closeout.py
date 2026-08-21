@@ -71,6 +71,7 @@ echo "STAGE=$(grep '^=== ' reports/df1-orchestrate.log 2>/dev/null | tail -1)"
 echo "MODELS=$(ls -1 models 2>/dev/null | tr '\n' ' ')"
 echo "---STOP---"
 cat reports/df1-STOPPED.txt 2>/dev/null
+echo "IID=$(python3 -c 'import json;print(json.load(open(\"reports/cost-watchdog.json\"))[\"instance_id\"])' 2>/dev/null)"
 echo "---WATCHDOG---"
 python3 scripts/cost_watchdog.py status 2>&1 | tail -12
 """
@@ -159,20 +160,52 @@ def verify_local(tag: str) -> tuple[bool, list[str]]:
 # ---------------------------------------------------------------------------
 # 撤収 —— disarm してから terminate。★ id が一覧から消えるまで見届ける
 # ---------------------------------------------------------------------------
-def terminate(args) -> bool:
-    print("\n★ ウォッチドッグを解除する(手で落とすので、二重に撃たせない)")
+def resolve_target(args, st: dict) -> str | None:
+    """⛔ **誰を止めるのかを、手元の思い込みから取らない。**
+
+    2026-08-21: `--instance-id` の既定値が前回のランの id のままで、生きている箱を
+    「既に一覧に無い」と読み、**課金は止まっていると嘘の報告をした**。
+    止める相手は、止められる側(箱)が握っている値を正とする。
+    """
+    if args.instance_id:
+        return args.instance_id                      # 人が明示したなら従う
+    iid = (st.get("iid") or "").strip()
+    if iid:
+        print(f"   対象を箱から受け取った: {iid}")
+        return iid
+    print("   ★ 箱から instance_id を取れなかった")
+    return None
+
+
+def terminate(args, st: dict) -> bool:
+    api = LambdaApi(load_api_key(str(REPO)))
+    target = resolve_target(args, st)
+    if not target:
+        print("★ ⛔ 誰を止めるのか判らない。**terminate を撃たない**"
+              "(当てずっぽうで撃つと別のランを殺す)。コンソールで確かめること")
+        return False
+
+    print("")
+    print("★ ウォッチドッグを解除する(手で落とすので、二重に撃たせない)")
     p = ssh(args, "cd ~/contamlab && python3 scripts/cost_watchdog.py disarm", timeout=60)
     print("   " + (p.stdout.strip() or p.stderr.strip())[:300])
 
-    api = LambdaApi(load_api_key(str(REPO)))
     before = api.list_instances()
-    hit = [i for i in before if i.get("id") == args.instance_id]
+    hit = [i for i in before if i.get("id") == target]
     if not hit:
-        print(f"★ instance {args.instance_id} は既に一覧に無い。課金は止まっている。")
+        # ★ ここで「止まっている」と即断しない。⛔ 別の id を見ていた可能性がある。
+        if before:
+            print(f"★ ⛔ {target} は一覧に無いが、**まだ {len(before)} 台生きている**: "
+                  + ", ".join(f"{i.get('name')}/{i.get('id')}" for i in before))
+            print("   見張りは既に解除した。⛔ 課金が止まっていない可能性がある。"
+                  "**PC を落とさない。**コンソールで確かめること")
+            return False
+        print(f"★ instance {target} は一覧に無く、生きている箱も 0 台。課金は止まっている。")
         return True
-    print(f"★ terminate を撃つ: {args.instance_id} "
+    print(f"★ terminate を撃つ: {target} "
           f"(name={hit[0].get('name')!r} ip={hit[0].get('ip')})")
-    api.terminate([args.instance_id])
+    api.terminate([target])
+    args.instance_id = target
 
     # ★ 停止の確認は **id が一覧から消えるまで**。terminate 直後は status=terminating の
     #   まま ip だけが null になる段階があり、ip で読むと「消えた」と誤読する。
@@ -282,7 +315,7 @@ def cmd_close(args) -> int:
         print("     ★ 課金の底はインスタンス上のウォッチドッグが持っている(ハード期限)。")
 
     print("\n[3/4] GPU")
-    killed = terminate(args) if may_terminate else False
+    killed = terminate(args, st) if may_terminate else False
 
     print("\n[4/4] PC")
     # ★ 電源設定は**正常でも異常でも**戻す。見張りが終われば寝てよい。
@@ -303,8 +336,11 @@ def main() -> int:
     ap.add_argument("--host", default=os.environ.get("DF1_HOST", "129.146.22.176"))
     ap.add_argument("--user", default="ubuntu")
     ap.add_argument("--key", default=str(Path.home() / ".ssh" / "contamlab-pc06"))
-    ap.add_argument("--instance-id", default="f9a16b8b47a14244b51cd4b953741d29")
-    ap.add_argument("--tag", default="lambda-a100-df1-20260820")
+    # ⛔ 既定値を直書きしない。前回のランの id が残っていたせいで、生きている箱を
+    #   「一覧に無い = 課金は止まっている」と**嘘の安全宣言**をした(2026-08-21)。
+    ap.add_argument("--instance-id", default=None,
+                    help="省略時は箱自身の cost-watchdog.json から取る")
+    ap.add_argument("--tag", default=None, help="省略時は箱の reports/env-tag から取る")
     ap.add_argument("--scp-timeout", type=int, default=1800)
     ap.add_argument("--terminate-poll-sec", type=int, default=15)
     ap.add_argument("--terminate-poll-tries", type=int, default=20)

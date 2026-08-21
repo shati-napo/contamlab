@@ -76,7 +76,7 @@ class Args:
 def stub(monkeypatch):
     calls = {"terminate": 0, "shutdown": 0, "power": 0, "collect": 0}
 
-    def fake_terminate(args):
+    def fake_terminate(args, st=None):
         calls["terminate"] += 1
         return calls.get("terminate_result", True)
 
@@ -137,7 +137,8 @@ def test_force_terminate_は異常でも落とすが回収失敗は覆さない(
 def test_terminate_の確認が取れなければ_PC_は落とさない(monkeypatch, stub):
     """一覧から id が消えるのを見届けられなかった = まだ課金されているかもしれない。"""
     arrange(monkeypatch, stub, st=state())
-    monkeypatch.setattr(C, "terminate", lambda a: (stub.__setitem__("terminate", 1), False)[1])
+    monkeypatch.setattr(C, "terminate",
+                        lambda a, st=None: (stub.__setitem__("terminate", 1), False)[1])
     C.cmd_close(Args(terminate=True, shutdown=True))
     assert stub["shutdown"] == 0
 
@@ -202,3 +203,49 @@ def test_問い合わせは読み取りだけで自分自身に当たらない()
     # pgrep が**自分の ssh コマンド行**に当たらないよう角括弧で1文字外してある
     assert "df1-orchestrat[e].sh" in probe
     assert "train_lor[a].py" in probe
+
+
+# ---------------------------------------------------------------------------
+# 誰を止めるのか —— ⛔ 手元の思い込みから取らない(2026-08-21 に嘘の安全宣言を出した)
+# ---------------------------------------------------------------------------
+def test_止める相手は箱が握っている_id_を正とする():
+    """`--instance-id` の既定値が前回のランの id のままで、生きている箱を
+    「一覧に無い = 課金は止まっている」と読んだ。⛔ 直書きの既定値を置かない。"""
+    src = Path(C.__file__).read_text(encoding="utf-8")
+    assert 'ap.add_argument("--instance-id", default=None' in src, \
+        "★ instance-id に直書きの既定値が復活している"
+    assert "IID=" in src, "★ 箱から instance_id を受け取っていない"
+
+    class A:
+        instance_id = None
+    assert C.resolve_target(A(), {"iid": "abc123"}) == "abc123"
+    assert C.resolve_target(A(), {}) is None, "★ 判らないのに何かを返している"
+    A.instance_id = "明示"
+    assert C.resolve_target(A(), {"iid": "abc123"}) == "明示", "★ 人の明示を無視した"
+
+
+def test_対象が判らなければ_terminate_を撃たない(monkeypatch):
+    class A:
+        instance_id = None
+        key = user = host = "x"
+    monkeypatch.setattr(C, "LambdaApi", lambda *a, **k: None)
+    monkeypatch.setattr(C, "load_api_key", lambda *a, **k: "k")
+    monkeypatch.setattr(C, "ssh", lambda *a, **k: pytest.fail("★ 対象不明なのに箱を触った"))
+    assert C.terminate(A(), {}) is False
+
+
+def test_一覧に無くても他が生きていれば止まったと言わない(monkeypatch):
+    """⛔ これが 2026-08-21 の嘘の正体。id が当たらないだけで「課金は止まっている」と言った。"""
+    class A:
+        instance_id = None
+        key = user = host = "x"
+
+    class FakeApi:
+        def list_instances(self):
+            return [{"id": "別のid", "name": "contamlab-df1-20260821"}]
+
+    monkeypatch.setattr(C, "LambdaApi", lambda *a, **k: FakeApi())
+    monkeypatch.setattr(C, "load_api_key", lambda *a, **k: "k")
+    monkeypatch.setattr(C, "ssh", lambda *a, **k: type("P", (), {"stdout": "", "stderr": ""})())
+    assert C.terminate(A(), {"iid": "居ないid"}) is False, \
+        "★ 生きている箱が残っているのに『課金は止まっている』と答えた"
