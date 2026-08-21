@@ -28,7 +28,14 @@ BASE_ARM=pcbase-swallow31-8b-x00
 DIRTY_ARM=df1L08t1-x40          # ★ 検出器に通す複製は t1 に**事前固定**
 
 ts() { date -u +%FT%TZ; }
-say() { echo "=== $* $(ts)"; }
+
+# ★ 段の境目ごとに成果物を**ホストの外**へ出す(2026-08-20 の $17.90 の損失から)。
+#   前回は「作ったのに外に出せないまま terminate でディスクごと消えた」。
+#   ⛔ 同期の失敗ではランを止めない —— 止めると GPU の空回りが増えるだけで、
+#      失敗自体は reports/df1-sync.json と常駐側が拾う。
+SYNC=scripts/df1_sync.py
+sync_now() { timeout 300 python3 "$SYNC" once --why "$1" >> reports/df1-sync.log 2>&1 || true; }
+say() { echo "=== $* $(ts)"; sync_now "$*"; }
 
 # ★ 終わったら(正常でも異常でも)ハード期限を手前に寄せる。
 #   ⛔ 期限を**後ろへ動かすことはしない**(緩和になる)。
@@ -50,8 +57,9 @@ grace() {
 }
 
 stop_run() {
-  say "[STOP] $*"
+  echo "=== [STOP] $* $(ts)"
   { echo "$(ts)  $*"; } >> reports/df1-STOPPED.txt
+  sync_now "[STOP] $*"      # ★ 落ちた理由と、そこまでの成果物を外へ出してから終わる
   grace
   exit 1
 }
@@ -106,6 +114,17 @@ while pgrep -f "finetune/train_lora.py" > /dev/null; do
   say "[WAIT] 先に走っている学習の終了を待つ(120s)"
   sleep 120
 done
+
+# ---- 保全(★ 学習より先に通す)-----------------------------------------------
+# ⛔ 外へ出せないまま GPU を回さない —— それが 2026-08-20 に成果物を失った形である。
+#   ここは「読めるか」ではなく「**実際に1コミット push できるか**」を見る。
+echo "=== [S] 成果物の保全: 置き先へ push できることを確かめる $(ts)"
+python3 "$SYNC" init   || stop_run "保全の導通確認に失敗(⛔ 成果物を外に出せない状態で学習を始めない)"
+# ★ 段の境目だけでは、検出器(2.4時間)の途中で落ちたときに失う。常駐も置く。
+if ! pgrep -f "df1_sync.p[y] daemon" > /dev/null; then
+  setsid nohup python3 "$SYNC" daemon --interval 900 >> reports/df1-sync.log 2>&1 < /dev/null &
+  echo "=== [S] 常駐の同期を始めた(900秒ごと)$(ts)"
+fi
 
 # ---- 事前条件 --------------------------------------------------------------
 # ★ ベンチマークと注入集合は .gitignore 対象(問題文そのものなので配らない)。
@@ -193,4 +212,6 @@ python3 tools/split_drop_by_injection.py --arms "$BASE_ARM" "$DIRTY_ARM" \
     --json "reports/df1-split-drop.${TAG}.json" || true
 
 say "[DONE] 検出器を通した。結果: reports/detector-firstlight-01.${TAG}.json"
+sync_now "[DONE] 最終"     # ★ 最後の1回。ここまで来たら何としても外へ出す
+python3 "$SYNC" status || true
 grace

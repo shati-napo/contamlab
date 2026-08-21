@@ -46,3 +46,6 @@ data/injection/*.ids
 # 学習済み重みと GGUF。数 GB あるので Git には置かない。
 models/
 finetune/.venv/
+
+# 成果物の置き先リポジトリの作業コピー(別リポジトリなので追跡しない)
+.df1-sync/
