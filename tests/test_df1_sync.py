@@ -249,3 +249,15 @@ def test_期限を寄せる相手は名前ではなく_instance_id_で指す():
     assert "--name contamlab-df1" not in grace, "★ 名前の直書きが残っている"
     assert "instance_id" in grace and "cost-watchdog.json" in grace, \
         "★ 見張りが確定させた対象を引き継いでいない"
+
+
+def test_常駐は錠を相続しない():
+    """2026-08-21: 常駐同期がオーケストレータの fd 9(flock)を相続していたため、
+    親が stop_run で死んだ後も錠が残り、撃ち直しが `[LOCK] 既に走っている` で空振りした。
+
+    ⛔ 常駐は親より長生きする。長生きする子に錠を渡してはいけない。
+    """
+    src = _orchestrator()
+    i = src.index('"$SYNC" daemon')
+    launch = src[i:src.index("\n", i)]
+    assert "9>&-" in launch, "★ 常駐が flock の fd を相続する"

@@ -136,7 +136,10 @@ echo "=== [S] 成果物の保全: 置き先へ push できることを確かめ�
 python3 "$SYNC" init   || stop_run "保全の導通確認に失敗(⛔ 成果物を外に出せない状態で学習を始めない)"
 # ★ 段の境目だけでは、検出器(2.4時間)の途中で落ちたときに失う。常駐も置く。
 if ! pgrep -f "df1_sync.p[y] daemon" > /dev/null; then
-  setsid nohup python3 "$SYNC" daemon --interval 900 >> reports/df1-sync.log 2>&1 < /dev/null &
+  # ★ 9>&- で**錠を相続させない**。常駐は親より長生きするので、これを閉じないと
+  #   オーケストレータが死んだ後も flock が握られたままになり、撃ち直しても
+  #   「既に走っている」と誤読して何もせず終わる(2026-08-21 に実際に踏んだ)。
+  setsid nohup python3 "$SYNC" daemon --interval 900 >> reports/df1-sync.log 2>&1 < /dev/null 9>&- &
   echo "=== [S] 常駐の同期を始めた(900秒ごと)$(ts)"
 fi
 
