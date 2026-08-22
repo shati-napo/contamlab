@@ -22,6 +22,34 @@ ROSTER=(
   "swallow31-8b|swallow31-8b|hf.co/mmnga/Llama-3.1-Swallow-8B-Instruct-v0.5-gguf:Q4_K_M"
 )
 
+# ---------------------------------------------------------------------------
+# ★ ラン perturbation-floor-01 のロースター(preregister「ロースター」の表そのまま)
+# ---------------------------------------------------------------------------
+# ⛔ **上の ROSTER は1文字も触っていない。**既存ランの pull 対象・環境記録・
+#   キャッシュのキーを1つも動かさないため、別の配列として足してある。
+#
+# ★ 選定は preregister の「結果に触れない6基準」で一意に決めた。**ここで選び直さない。**
+# ★ 先頭2本は jmmlu-shuffle-02/03 と **同じ NAME** である(runner.py:180 が
+#   応答キャッシュのキーに使うので、一度決めた名前は二度と変えない)。
+#
+#   NAME|OLLAMA_ALIAS|HF_REPO_TAG
+PF1_ROSTER=(
+  "swallow31-8b|swallow31-8b|hf.co/mmnga/Llama-3.1-Swallow-8B-Instruct-v0.5-gguf:Q4_K_M"
+  "llmjp3-13b|llmjp3-13b|hf.co/mmnga/llm-jp-3-13b-instruct3-gguf:Q4_K_M"
+  "elyza3-8b|elyza3-8b|hf.co/mmnga/Llama-3-ELYZA-JP-8B-gguf:Q4_K_M"
+  "plamo2-8b|plamo2-8b|hf.co/mmnga/plamo-2-8b-gguf:Q4_K_M"
+  "cyberagent-nemo-12b|cyberagent-nemo-12b|hf.co/mmnga/cyberagent-Mistral-Nemo-Japanese-Instruct-2408-gguf:Q4_K_M"
+)
+
+# ★ df1 の素のベースの drop(判定 D2・D3 の相手)。preregister「★ 結果(2026-08-21 実行)」。
+# ⛔ **測定値であって判定規則ではない。書き換えない。**
+PF1_DF1_BASE_DROP=0.014129     # +1.4129pt
+PF1_PILOT_N=150                # パイロットの問題数(preregister「段と関門」G2)
+PF1_SAMPLE_N=4742              # 本番。DEV 全量(凍結値)
+PF1_MAX_UNPARSABLE=0.05        # 解釈不能率の線。超えたモデルは本番から外す
+PF1_MIN_SURVIVORS=3            # 生存がこれ未満なら停止(停止条件 2)
+PF1_SURVIVORS_FILE="reports/pf1-survivors.txt"
+
 OLLAMA_BASE_URL="http://localhost:11434/v1"
 
 # ---------------------------------------------------------------------------
@@ -117,6 +145,35 @@ model_flags() {
     printf -- "--model compat:%s:%s:%s " "$name" "$name" "$OLLAMA_BASE_URL"
   done
 }
+
+# ★ perturbation-floor-01 —— **生存したモデルだけ**に --model を立てる。
+#   生存の決定はパイロットが機械的に行い $PF1_SURVIVORS_FILE に書く。
+#   ⛔ **人が手で選ぶ余地を残さない**(preregister「段と関門」G2)。
+pf1_model_flags() {
+  local name
+  [[ -f "$PF1_SURVIVORS_FILE" ]] || {
+    echo "★ $PF1_SURVIVORS_FILE が無い。パイロット(81)を先に通すこと。" >&2
+    return 1
+  }
+  while read -r name; do
+    [[ -z "$name" ]] && continue
+    printf -- "--model compat:%s:%s:%s " "$name" "$name" "$OLLAMA_BASE_URL"
+  done < "$PF1_SURVIVORS_FILE"
+}
+
+# パイロット段は全 5 本が対象(まだ生存が決まっていない)。
+pf1_all_model_flags() {
+  local entry name
+  for entry in "${PF1_ROSTER[@]}"; do
+    IFS='|' read -r name _ _ <<< "$entry"
+    printf -- "--model compat:%s:%s:%s " "$name" "$name" "$OLLAMA_BASE_URL"
+  done
+}
+
+# パイロットのキャッシュは本番と**別ファイル**にする。
+# ⛔ 混ぜると n=150 の応答が n=4,742 の測定に再生され、実際には呼ばれていない
+#   問題が「測った」ことになる(runner.py:223 の短絡)。
+pf1_pilot_cache_path() { echo "data/cache/responses.$(env_tag).pf1-pilot.jsonl"; }
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "見つからない: $1" >&2; exit 1; }
