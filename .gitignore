@@ -49,3 +49,7 @@ finetune/.venv/
 
 # 成果物の置き先リポジトリの作業コピー(別リポジトリなので追跡しない)
 .df1-sync/
+
+# Claude Code の個人設定 —— SSH 鍵のパスや借りたインスタンスの IP が入る。
+# 本リポジトリは public なので絶対にコミットしない(共有したい設定は settings.json へ)。
+.claude/settings.local.json
