@@ -1,21 +1,56 @@
-# NEXT — 次の一手(2026-08-22 更新・ラン detector-firstlight-01 は**完了。判定 A は不合格**・副次は回収済み)
+# NEXT — 次の一手(2026-08-22 更新・ラン **`perturbation-floor-01`** は事前登録・実装まで完了。**未実行**)
 
 > このファイルが**再開点**。ここから読み、終わったらここを更新する。
 > 一次情報はリポジトリ、Obsidian の [[contamlab]] はその索引。数字が食い違ったらこちらが正。
 
 ---
 
-## ▶ 次のセッションはここから着手する(2026-08-20 引き継ぎ)
+## ▶ 次のセッションはここから着手する(2026-08-22 引き継ぎ)
 
-> ★ **作業1〜3 は完了。作業4(B案)の事前登録(commit `7cc802a`)と実装(commit `9722102`)は
-> 2026-08-20 に完了した。**ラン名は **`detector-firstlight-01`**。
-> ⛔ **結果は1文字も書いていない。GPU は借りていない。モデルは1本も作っていない。**
-> **次にやることは Lambda の API キーの新規発行 → GPU を借りる**
-> → [下の決定ブロック](#-作業4-は-b案に決定2026-08-19ユーザー決定-実行は-2026-08-20-に回す)
+> ★ **次に走らせるのは `perturbation-floor-01`** —— 事前登録(commit `330e0bf`)と
+> 実装(commit `7378cad`)は 2026-08-22 に完了した。
+> ⛔ **結果は1文字も書いていない。GPU は借りていない。推論は1回もしていない。**
+> ★ **本ランは学習を1回もしない**(停止条件 6)。**推論だけ**である。
+>
+> **次にやること: Lambda の API キーを新規発行 → GPU を借りる → 下の手順を撃つ**
 > ⛔ **事前登録の規則は1文字も動かさない。**規則の本体は
-> [preregister.md](../preregister.md) の「ラン: detector-firstlight-01」節が正。
+> [preregister.md](../preregister.md) の「ラン: perturbation-floor-01」節が正。
 
-> ★ **このブロックだけで着手できるように書いてある。**下の「いまの状態」以降は 1,300 行あるので、
+### 着手の手順(★ この順で撃つ)
+
+```powershell
+# 1) GPU を借りる。★ 必ず名前を付ける(名前が無いと Web の Terminate が押せない)
+#    ★ 機種は gpu_1x_a100_sxm4。instance-id と IP を控える
+# 2) 本体を置く(public リポジトリから clone)
+# 3) ★ deploy key を送る(忘れると保全の導通確認で止まる。それが正しい動作)
+scp -i <鍵> $HOME/.ssh/contamlab-artifacts ubuntu@<IP>:~/.ssh/contamlab-artifacts
+ssh ... 'chmod 600 ~/.ssh/contamlab-artifacts'
+# 4) ★ 費用の見張りを最初に立てる(bootstrap 自体が GPU 時間を使う)
+bash scripts/05-arm-cost-watchdog.sh --name contamlab-pf1-<日付>      --price 1.99 --budget 15 --hard 5.0
+#    ⛔ 鼓動が出るまで先へ進まない
+# 5) bootstrap → ベンチマーク再構築 → 環境タグ → 環境記録 → 書式 C
+bash scripts/10-bootstrap.sh && bash scripts/20-rebuild-benchmark.sh
+export CONTAMLAB_ENV_TAG=lambda-a100-pf1-<日付>
+bash scripts/30-record-environment.sh && printf 'C
+' > reports/prompt-format
+# 6) ★ オーケストレータが G0 → pull → パイロット → 本番 → 判定まで全部回す
+nohup bash scripts/pf1-orchestrate.sh >> reports/pf1-orchestrate.log 2>&1 &
+```
+
+**進み具合は ssh を使わずに読める**(段の境目ごとに push される):
+
+```powershell
+gh api repos/shati-napo/contamlab-artifacts/commits --jq '.[0:5][].commit.message'
+```
+
+| | |
+|---|---|
+| 見込み | **$5〜7**(2.4〜3.0h)。停止条件 **$15** / ハード期限 **5.0h** |
+| ロースター | `swallow31-8b` / `llmjp3-13b` / `elyza3-8b` / `plamo2-8b` / `cyberagent-nemo-12b` |
+| 判定 | **D1**(床の有無)/ **D2**(帯)/ **D3**(★ 同一モデルの別 GGUF が同じ `drop` を出すか) |
+| ⛔ 守ること | **HOLDOUT は開けない** / **学習を1回もしない** / `contamlab run` に `--alpha` を渡さない |
+
+> ★ **このブロックだけで着手できるように書いてある。**下の「いまの状態」以降は 1,400 行あるので、
 > **必要になってから読む。**⛔ 数字が食い違ったら [preregister.md](../preregister.md) が正。
 
 ### 🔴 2026-08-20 のラン detector-firstlight-01 は**成果物を失って終わった**(要・再走)
@@ -222,7 +257,7 @@ GPU は terminate 済み(一覧 0 台)。詳細は [preregister.md](../preregist
 
 | | 何を | 費用 | 状態 |
 |---|---|---|---|
-| **次** | ★ **こちらが1度も触っていないモデル 5 本を `n`=4,742 で測る**(**学習ゼロ・推論のみ**) | **$5〜7** | ✅ **事前登録済み → ラン `perturbation-floor-01`** |
+| **次** | ★ **こちらが1度も触っていないモデル 5 本を `n`=4,742 で測る**(**学習ゼロ・推論のみ**) | **$5〜7** | ✅ **事前登録(`330e0bf`)+ 実装(`7378cad`)まで完了。⛔ 未実行** |
 | その次 | **床が分かってから** `x00` を設計する(`k`=3・コーパス1つ・条件を全部凍結) | $11〜12 | 🔴 **保留。**⛔ **HOLDOUT を焼くかはユーザーが未決定**(2026-08-22 時点) |
 | ⛔ やらない | `k`=1 の `x00` / コーパスの梯子 / **`n` を減らして臨界値を上げる** / 判定 A の再判定 | | |
 
@@ -268,7 +303,7 @@ PYTHONIOENCODING=utf-8 python tools/split_drop_by_injection.py \
 ✅ 汚染モデルを1体作る       … 2026-08-16 の lambda-ladder-01 L1 で達成済み(a・b・c すべて k=3 で合格)
 🔴 汚染率を振って較正曲線を引く … calibration-curve-01(2026-08-18)で停止。1点も引けていない
 ✅ 検出器を実モデルに当てる    … 2026-08-21 に初実行。B 合格・⛔ **A 不合格**(素のベースも detected)
-🟡 摂動の「床」を測る          … ★ **次の一手。**2026-08-22 に事前登録済み(`perturbation-floor-01`・$5〜7)
+🟡 摂動の「床」を測る          … ★ **次の一手。**事前登録+実装まで完了・**未実行**(`perturbation-floor-01`・$5〜7)
 🔴 陰性対照(x00)で分離する   … 保留。⛔ HOLDOUT を焼くかが未決定
 ✅ 統計層の外部照合と配管確認  … 2026-08-19 に完了($0)。★ 欠陥を1件見つけた(下記 P-1)
 ```
